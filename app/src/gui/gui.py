@@ -78,6 +78,8 @@ class MainWindow(QDialog):
         self.rpmLabel.updateRpmLabel(dashMachineInfo.rpm)
         self.gearLabel.updateGearLabel(dashMachineInfo.gearVoltage.gearType)
         self.waterTempTitleValueBox.updateValueLabel(dashMachineInfo.waterTemp)
+        #aaaaaaaaaaaa
+        #bdsihsd
         self.waterTempTitleValueBox.updateWaterTempWarning(dashMachineInfo.waterTemp)
         self.oilTempTitleValueBox.updateValueLabel(dashMachineInfo.oilTemp)
         self.oilTempTitleValueBox.updateOilTempWarning(dashMachineInfo.oilTemp)
