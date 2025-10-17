@@ -4,6 +4,8 @@ from typing import List
 
 import can
 
+import zlib
+
 from src.models.models import (
     BatteryVoltage,
     DashMachineInfo,
@@ -21,47 +23,101 @@ class CanIdLength:
 
 
 class DashInfoListener(can.Listener):
-    dashMachineInfo: DashMachineInfo
+    """
+    MoTeC Set 3 データプロトコル（複数フレーム）を組み立て、
+    解析して dashMachineInfo オブジェクトを更新するステートフルなリスナー。
+    """
+    CAN_ID = 0xE8  # MoTeC Set 3 protocol CAN ID
+    PACKET_SIZE = 176
+    HEADER = bytes([0x82, 0x81, 0x80])
 
     def __init__(self) -> None:
         super().__init__()
+        # 複数のCANフレームを結合するためのバッファ
+        self.buffer = bytearray()
+        # 解析済みの最新データを保持するためのオブジェクト
         self.dashMachineInfo = DashMachineInfo()
 
     def on_message_received(self, msg: can.Message) -> None:
-        if msg.arbitration_id == 0x5F0:
-            self.dashMachineInfo.setRpm(int.from_bytes(msg.data[0:2], "big"))
-            self.dashMachineInfo.throttlePosition = int.from_bytes(msg.data[2:4]) / 10
-            self.dashMachineInfo.waterTemp = WaterTemp(
-                int.from_bytes(msg.data[4:6], "big") // 10
-            )
-            self.dashMachineInfo.oilTemp = OilTemp(
-                int.from_bytes(msg.data[6:8], "big") // 10
-            )
-        elif msg.arbitration_id == 0x5F1:
-            self.dashMachineInfo.oilPress.oilPress = (
-                int.from_bytes(msg.data[0:2], "big") / 10
-            )
-            self.dashMachineInfo.gearVoltage = GearVoltage(
-                int.from_bytes(msg.data[2:4], "big") / 1000
-            )
-            self.dashMachineInfo.batteryVoltage = BatteryVoltage(
-                int.from_bytes(msg.data[4:6], "big") / 100
-            )
-        elif msg.arbitration_id == 0x5F2:
-            self.dashMachineInfo.fuelPress = FuelPress(
-                int.from_bytes(msg.data[2:4]) / 10
-            )
-            self.dashMachineInfo.brakePress.front = (
-                int.from_bytes(msg.data[4:6], "big") / 10
-            )
-            self.dashMachineInfo.brakePress.rear = (
-                int.from_bytes(msg.data[6:8], "big") / 10
-            )
-        elif msg.arbitration_id == 0x5F3:
-            self.dashMachineInfo.fanEnabled = bool(msg.data[1])
+        """NotifierからCANメッセージが届くたびに呼び出される。"""
+        
+        # 1. 目的のCAN ID (0xE8) かどうかをチェック
+        if msg.arbitration_id != self.CAN_ID:
+            return # 関係ないIDのメッセージは無視
 
-        # ここの数字は後で変更
+        # 2. パケットの先頭かどうかをチェック
+        if msg.data.startswith(self.HEADER):
+            # 新しいパケットの始まりなので、バッファをリセット
+            self.buffer = bytearray(msg.data)
+            return
 
+        # 3. パケットの組み立て途中であれば、データをバッファに追加
+        if 0 < len(self.buffer) < self.PACKET_SIZE:
+            self.buffer.extend(msg.data)
+
+        # 4. パケットが完全に揃ったかチェック
+        if len(self.buffer) >= self.PACKET_SIZE:
+            # CRCチェックとデータの解析を行う
+            self._process_full_packet()
+            # 処理が終わったら、次のパケットのためにバッファをクリア
+            self.buffer.clear()
+
+    def _process_full_packet(self) -> None:
+        """
+        組み立てが完了した176バイトの完全なパケットを処理
+        """
+        # 5. CRCチェック
+        data_to_check = self.buffer[:172]
+        received_crc = int.from_bytes(self.buffer[172:176], 'big')
+        calculated_crc = zlib.crc32(data_to_check)
+
+        if calculated_crc != received_crc:
+            # CRCが一致しないデータは不正とみなし、処理を中断
+            return
+
+        # 6. CRCが一致した場合、データを解析し dashMachineInfo を更新
+        try:
+            # PDFのバイトマップに従ってデータを抽出・変換
+            # バイトオーダーは "big" (Motorola byte order) 
+
+            # RPM (bytes 4:6)
+            rpm_val = int.from_bytes(self.buffer[4:6], 'big')
+            self.dashMachineInfo.setRpm(rpm_val)
+
+            # Throttle Position (bytes 6:8, scale 0.1)
+            tp_val = round(int.from_bytes(self.buffer[6:8], 'big') * 0.1, 1)
+            self.dashMachineInfo.throttlePosition = tp_val
+
+            # Engine Temperature (WaterTemp) (bytes 12:14, scale 0.1)
+            wt_val = round(int.from_bytes(self.buffer[12:14], 'big') * 0.1, 1)
+            self.dashMachineInfo.waterTemp = WaterTemp(int(wt_val))
+
+            # Oil Temperature (bytes 26:28, scale 0.1)
+            ot_val = round(int.from_bytes(self.buffer[26:28], 'big') * 0.1, 1)
+            self.dashMachineInfo.oilTemp = OilTemp(int(ot_val))
+            
+            # Oil Pressure (bytes 28:30, scale 0.1)
+            op_val = round(int.from_bytes(self.buffer[28:30], 'big') * 0.1, 1)
+            self.dashMachineInfo.oilPress.oilPress = op_val
+            
+            # Gear Voltage (bytes 30:32, scale 0.01)
+            gv_val = round(int.from_bytes(self.buffer[30:32], 'big') * 0.01, 2)
+            self.dashMachineInfo.gearVoltage = GearVoltage(gv_val)
+
+            # Battery Voltage (bytes 48:50, scale 0.01)
+            bv_val = round(int.from_bytes(self.buffer[48:50], 'big') * 0.01, 2)
+            self.dashMachineInfo.batteryVoltage = BatteryVoltage(bv_val)
+
+            # Fuel Pressure (bytes 24:26, scale 0.1)
+            fp_val = round(int.from_bytes(self.buffer[24:26], 'big') * 0.1, 1)
+            self.dashMachineInfo.fuelPress = FuelPress(int(fp_val))
+
+            # Fuel Effective Pulse Width (bytes 112:114, scale 0.5 µs)
+            fepw_val = round(int.from_bytes(self.buffer[112:114], 'big') * 0.5, 1)
+            self.dashMachineInfo.fuelEffectivePulseWidth = fepw_val
+        except IndexError:
+            # 万が一、パケットの長さが足りない場合に備えます。
+            print("MoTeC Protocol: Packet parsing error due to invalid length!")
 
 class UdpPayloadListener(can.Listener):
     MOTEC_CAN_ID_LENGTHS = [

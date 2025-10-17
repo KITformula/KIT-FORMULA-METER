@@ -47,10 +47,10 @@ class MainWindow(QDialog):
         palette = QApplication.palette()
         palette.setColor(self.backgroundRole(), QColor("#000"))
         palette.setColor(self.foregroundRole(), QColor("#FFF"))
-        self.setPalette(palette)
+        self.setPalette(palette)#画面背景と文字設定
 
         self.createAllWidgets()
-        self.createTopGroupBox()
+        #self.createTopGroupBox()
         self.createLeftGroupBox()
         self.createCenterGroupBox()
         self.createRightGroupBox()
@@ -60,26 +60,24 @@ class MainWindow(QDialog):
         mainLayout.setContentsMargins(0, 0, 0, 0)
         mainLayout.setSpacing(0)
         self.setLayout(mainLayout)
-        mainLayout.addWidget(self.topGroupBox, 0, 0, 1, 3)
-        mainLayout.addWidget(self.leftGroupBox, 1, 0, 1, 1)
+        #mainLayout.addWidget(self.topGroupBox, 0, 0, 1, 3)
+        mainLayout.addWidget(self.rightGroupBox, 1, 0, 1, 1)
         mainLayout.addWidget(self.centerGroupBox, 1, 1, 1, 1)
-        mainLayout.addWidget(self.rightGroupBox, 1, 2, 1, 1)
+        mainLayout.addWidget(self.leftGroupBox, 1, 2, 1, 1)
         mainLayout.addWidget(self.bottomGroupBox, 2, 0, 1, 3)
 
         mainLayout.setColumnStretch(0, 3)
         mainLayout.setColumnStretch(1, 2)
         mainLayout.setColumnStretch(2, 3)
-        mainLayout.setRowStretch(0, 1)
-        mainLayout.setRowStretch(1, 6)
+        mainLayout.setRowStretch(0, 0)
+        mainLayout.setRowStretch(1, 7)
         mainLayout.setRowStretch(2, 1)
 
     def updateDashboard(self, dashMachineInfo: DashMachineInfo, message: Message):
-        self.rpmLightBar.updateRpmBar(dashMachineInfo.rpm)
+        #self.rpmLightBar.updateRpmBar(dashMachineInfo.rpm)
         self.rpmLabel.updateRpmLabel(dashMachineInfo.rpm)
         self.gearLabel.updateGearLabel(dashMachineInfo.gearVoltage.gearType)
         self.waterTempTitleValueBox.updateValueLabel(dashMachineInfo.waterTemp)
-        #aaaaaaaaaaaa
-        #bdsihsd
         self.waterTempTitleValueBox.updateWaterTempWarning(dashMachineInfo.waterTemp)
         self.oilTempTitleValueBox.updateValueLabel(dashMachineInfo.oilTemp)
         self.oilTempTitleValueBox.updateOilTempWarning(dashMachineInfo.oilTemp)
@@ -108,7 +106,7 @@ class MainWindow(QDialog):
         self.gearLabel = GearLabel()
         self.lapTimeLabel = LapTimeLabel()
 
-        self.waterTempTitleValueBox = TitleValueBox("Water Teeemp")
+        self.waterTempTitleValueBox = TitleValueBox("Water Temp")
         self.oilTempTitleValueBox = TitleValueBox("Oil Temp")
         self.oilPressTitleValueBox = TitleValueBox("Oil Press")
         self.fuelPressTitleValueBox = TitleValueBox("Fuel Press")
@@ -138,17 +136,17 @@ class MainWindow(QDialog):
         self.messageIconValueBox.layout.setColumnStretch(1, 6)
 
     # ------------------------------Define Overall Layout Group Box---------------------
-    def createTopGroupBox(self):
-        self.topGroupBox = QGroupBox()
-        self.topGroupBox.setFlat(True)
+    # def createTopGroupBox(self):
+    #     self.topGroupBox = QGroupBox()
+    #     self.topGroupBox.setFlat(True)
 
-        layout = QGridLayout()
-        self.rpmLightBar = RpmLightBar()
-        layout.addWidget(self.rpmLightBar, 0, 0)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
+    #     layout = QGridLayout()
+    #     self.rpmLightBar = RpmLightBar()
+    #     layout.addWidget(self.rpmLightBar, 0, 0)
+    #     layout.setContentsMargins(0, 0, 0, 0)
+    #     layout.setSpacing(0)
 
-        self.topGroupBox.setLayout(layout)
+    #     self.topGroupBox.setLayout(layout)
 
     def createLeftGroupBox(self):
         self.leftGroupBox = QGroupBox()
