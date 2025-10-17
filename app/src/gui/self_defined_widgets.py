@@ -59,7 +59,7 @@ class TitleValueBox(QGroupBox):
         self.layout = QGridLayout()
         self.setObjectName("TitleValueBox")
         self.setStyleSheet(
-            "QGroupBox#TitleValueBox { border: 1px solid #333; border-radius: 3px;}"
+            "QGroupBox#TitleValueBox { border: 2px solid #ffffff; border-radius: 3px;}"
         )
         self.TitleFont = "Arial"
         self.titleColor = "#FD6"
@@ -166,7 +166,7 @@ class IconValueBox(QGroupBox):
         super(IconValueBox, self).__init__(None)
         self.setFlat(True)
 
-        self.valueFont = QFont("Arial", 18)
+        self.valueFont = QFont("Monospaced Font", 18)
         self.valueColor = "#FFF"
         self.layout = QGridLayout()
 
@@ -242,7 +242,7 @@ class PedalBar(QProgressBar):
         self.setMaximum(maxValue)
         # self.setValue(40)
         self.setTextVisible(False)
-        self.setOrientation(QtCore.Qt.Vertical)
+        self.setOrientation(QtCore.Qt.Horizontal)
         # self.setStyleSheet(
         #     """
         #     QProgressBar
@@ -259,14 +259,14 @@ class PedalBar(QProgressBar):
             QProgressBar
                 {
                     border: 2px solid;
-                    border-color: #AAA;
+                    border-color: #ffffff;
                     border-radius: 5px;
                     background-color: #333;
                 }
             QProgressBar::chunk
                 {
                     background-color: %s;
-                    height: 1px;
+                    
                 }
             """
             % (barColor)
@@ -306,14 +306,18 @@ class RpmLightBar(QGroupBox):
         self.lightRpm_5 = 5000
         self.lightRpm_6 = 5500
         self.lightRpm_7 = 6000
-        self.lightRpm_8 = 6500
-        self.lightRpm_9 = 7000
-        self.lightRpm_10 = 7500
-        self.lightRpm_11 = 8000
-        self.lightRpm_12 = 8500
+        self.lightRpm_8 = 7900
+        self.lightRpm_9 = 8000
+        self.lightRpm_10 = 9000
+        self.lightRpm_11 = 10000
+        self.lightRpm_12 = 10500
+        self.lightRpm_13 = 11000
+        self.lightRpm_14 = 11500
+        self.lightRpm_15 = 12000
+
 
         self.greenLightColor = "#0F0"
-        self.yellowLightColor = "#FF0"
+        self.BlueLightColor = "#00ffff"
         self.redLightColor = "#F00"
         self.blueLightColor = "#8FF"
 
@@ -321,14 +325,17 @@ class RpmLightBar(QGroupBox):
         self.light_2 = RpmLight(self.lightRpm_2, self.greenLightColor)
         self.light_3 = RpmLight(self.lightRpm_3, self.greenLightColor)
         self.light_4 = RpmLight(self.lightRpm_4, self.greenLightColor)
-        self.light_5 = RpmLight(self.lightRpm_5, self.yellowLightColor)
-        self.light_6 = RpmLight(self.lightRpm_6, self.yellowLightColor)
-        self.light_7 = RpmLight(self.lightRpm_7, self.yellowLightColor)
-        self.light_8 = RpmLight(self.lightRpm_8, self.yellowLightColor)
+        self.light_5 = RpmLight(self.lightRpm_5, self.greenLightColor)
+        self.light_6 = RpmLight(self.lightRpm_6, self.redLightColor)
+        self.light_7 = RpmLight(self.lightRpm_7, self.redLightColor)
+        self.light_8 = RpmLight(self.lightRpm_8, self.redLightColor)
         self.light_9 = RpmLight(self.lightRpm_9, self.redLightColor)
         self.light_10 = RpmLight(self.lightRpm_10, self.redLightColor)
-        self.light_11 = RpmLight(self.lightRpm_11, self.blueLightColor)
-        self.light_12 = RpmLight(self.lightRpm_12, self.blueLightColor)
+        self.light_11 = RpmLight(self.lightRpm_11, self.BlueLightColor)
+        self.light_12 = RpmLight(self.lightRpm_12, self.BlueLightColor)
+        self.light_13 = RpmLight(self.lightRpm_13, self.BlueLightColor)
+        self.light_14 = RpmLight(self.lightRpm_14, self.BlueLightColor)
+        self.light_15 = RpmLight(self.lightRpm_15, self.BlueLightColor)
 
         self.layout.addWidget(self.light_1, 0, 0)
         self.layout.addWidget(self.light_2, 0, 1)
@@ -342,6 +349,10 @@ class RpmLightBar(QGroupBox):
         self.layout.addWidget(self.light_10, 0, 9)
         self.layout.addWidget(self.light_11, 0, 10)
         self.layout.addWidget(self.light_12, 0, 11)
+        self.layout.addWidget(self.light_13, 0, 12)
+        self.layout.addWidget(self.light_14, 0, 13)
+        self.layout.addWidget(self.light_15, 0, 14)
+
 
         # self.layout.setContentsMargins(0, 0, 0, 0)
         # self.layout.setSpacing(0)
@@ -361,7 +372,9 @@ class RpmLightBar(QGroupBox):
         self.light_10.updateRpmLightColor(rpm)
         self.light_11.updateRpmLightColor(rpm)
         self.light_12.updateRpmLightColor(rpm)
-
+        self.light_13.updateRpmLightColor(rpm)
+        self.light_14.updateRpmLightColor(rpm)
+        self.light_15.updateRpmLightColor(rpm)
 
 class RpmLight(QGroupBox):
     def __init__(self, onRpm, onColor):
@@ -371,9 +384,8 @@ class RpmLight(QGroupBox):
         # self.setFixedSize(51, 40)
 
         self.offColor = "#333"  # dark gray
-        # self.shiftRpm = 8500
-        self.shiftRpm = 8700
-        self.shiftColor = "#8FF"  # lightblue
+        self.shiftRpm = 12300
+        self.shiftColor = "#ffff00"  # yellow
 
         self.onRpm = onRpm
         self.onColor = onColor
@@ -392,14 +404,14 @@ class GearLabel(QCustomLabel):
     def __init__(self):
         super(GearLabel, self).__init__()
         self.setAlignment(QtCore.Qt.AlignCenter)
-        self.setFontFamily("Arial")
-        self.setFontScale(2.5)
+        self.setFontFamily("Monospaced Font")
+        self.setFontScale(3.0)
         self.setStyleSheet("color : #FFF; background-color: #000")
 
     def updateGearLabel(self, gearType: GearType):
         if int(gearType) == GearType.NEUTRAL:
             self.setText("N")
-            self.setStyleSheet("font-weight: bold; color : #5AFF19;")
+            self.setStyleSheet("font-weight: bold; color : #00ff7f;")
         else:
             self.setText(str(int(gearType)))
             self.setStyleSheet("font-weight: bold; color : #FFF;")
@@ -409,7 +421,7 @@ class RpmLabel(QCustomLabel):
     def __init__(self):
         super(RpmLabel, self).__init__()
         self.setAlignment(QtCore.Qt.AlignCenter)
-        self.setFontFamily("Arial")
+        self.setFontFamily("Monospaced Font")
         self.setFontScale(0.8)
         self.setStyleSheet("font-weight: bold; color : #FFF; background-color: #000")
 
@@ -417,14 +429,15 @@ class RpmLabel(QCustomLabel):
         self.setText(str(rpm))
 
 
-class LapTimeLabel(QCustomLabel):
+class LapCountLabel(QCustomLabel):
     def __init__(self):
-        super(LapTimeLabel, self).__init__()
+        super(LapCountLabel, self).__init__()
 
         self.setAlignment(QtCore.Qt.AlignCenter)
-        self.setFontFamily("Times New Roman")
+        self.setFontFamily("Monospaced Font")
         self.setFontScale(0.8)
-        self.setStyleSheet("color : #B6F; background-color: #000")
+        self.setStyleSheet("color : #ffffff; background-color: #000")
 
-    def updateLapTimeLabel(self, message: Message):
-        self.setText(str(round(message.laptime, 2)) + " s")
+    def updateLapCountLabel(self, message: Message):
+
+        self.setText(str(round(message.laptime, 1))+"0.00")

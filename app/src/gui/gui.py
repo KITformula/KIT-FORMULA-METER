@@ -14,7 +14,7 @@ from PyQt5.QtWidgets import (
 from src.gui.self_defined_widgets import (
     GearLabel,
     IconValueBox,
-    LapTimeLabel,
+    LapCountLabel,
     PedalBar,
     RpmLabel,
     RpmLightBar,
@@ -50,31 +50,31 @@ class MainWindow(QDialog):
         self.setPalette(palette)#画面背景と文字設定
 
         self.createAllWidgets()
-        #self.createTopGroupBox()
+        self.createTopGroupBox()
         self.createLeftGroupBox()
         self.createCenterGroupBox()
         self.createRightGroupBox()
-        self.createBottomGroupBox()
+        #self.createBottomGroupBox()
 
         mainLayout = QGridLayout()
         mainLayout.setContentsMargins(0, 0, 0, 0)
         mainLayout.setSpacing(0)
         self.setLayout(mainLayout)
-        #mainLayout.addWidget(self.topGroupBox, 0, 0, 1, 3)
-        mainLayout.addWidget(self.rightGroupBox, 1, 0, 1, 1)
+        mainLayout.addWidget(self.topGroupBox, 0, 0, 1, 3)
+        mainLayout.addWidget(self.leftGroupBox, 1, 0, 1, 1)
         mainLayout.addWidget(self.centerGroupBox, 1, 1, 1, 1)
-        mainLayout.addWidget(self.leftGroupBox, 1, 2, 1, 1)
-        mainLayout.addWidget(self.bottomGroupBox, 2, 0, 1, 3)
+        mainLayout.addWidget(self.rightGroupBox, 1, 2, 1, 1)
+        #mainLayout.addWidget(self.bottomGroupBox, 2, 0, 1, 3)
 
         mainLayout.setColumnStretch(0, 3)
         mainLayout.setColumnStretch(1, 2)
         mainLayout.setColumnStretch(2, 3)
-        mainLayout.setRowStretch(0, 0)
-        mainLayout.setRowStretch(1, 7)
-        mainLayout.setRowStretch(2, 1)
+        mainLayout.setRowStretch(0, 1)
+        mainLayout.setRowStretch(1, 30)
+        mainLayout.setRowStretch(2, 0)
 
     def updateDashboard(self, dashMachineInfo: DashMachineInfo, message: Message):
-        #self.rpmLightBar.updateRpmBar(dashMachineInfo.rpm)
+        self.rpmLightBar.updateRpmBar(dashMachineInfo.rpm)
         self.rpmLabel.updateRpmLabel(dashMachineInfo.rpm)
         self.gearLabel.updateGearLabel(dashMachineInfo.gearVoltage.gearType)
         self.waterTempTitleValueBox.updateValueLabel(dashMachineInfo.waterTemp)
@@ -84,7 +84,7 @@ class MainWindow(QDialog):
         self.oilPressTitleValueBox.updateValueLabel(dashMachineInfo.oilPress.oilPress)
         self.oilPressTitleValueBox.updateOilPressWarning(dashMachineInfo.oilPress)
         self.messageIconValueBox.updateMessageLabel(message)
-        self.lapTimeLabel.updateLapTimeLabel(message)
+        self.lapCountLabel.updateLapCountLabel(message)
         self.timeIconValueBox.updateTime()
         self.fuelPressTitleValueBox.updateValueLabel(dashMachineInfo.fuelPress)
         self.fanSwitchStateTitleValueBox.updateBoolValueLabel(
@@ -104,7 +104,7 @@ class MainWindow(QDialog):
     def createAllWidgets(self):
         self.rpmLabel = RpmLabel()
         self.gearLabel = GearLabel()
-        self.lapTimeLabel = LapTimeLabel()
+        self.lapCountLabel = LapCountLabel()
 
         self.waterTempTitleValueBox = TitleValueBox("Water Temp")
         self.oilTempTitleValueBox = TitleValueBox("Oil Temp")
@@ -136,17 +136,17 @@ class MainWindow(QDialog):
         self.messageIconValueBox.layout.setColumnStretch(1, 6)
 
     # ------------------------------Define Overall Layout Group Box---------------------
-    # def createTopGroupBox(self):
-    #     self.topGroupBox = QGroupBox()
-    #     self.topGroupBox.setFlat(True)
+    def createTopGroupBox(self):
+        self.topGroupBox = QGroupBox()
+        self.topGroupBox.setFlat(True)
 
-    #     layout = QGridLayout()
-    #     self.rpmLightBar = RpmLightBar()
-    #     layout.addWidget(self.rpmLightBar, 0, 0)
-    #     layout.setContentsMargins(0, 0, 0, 0)
-    #     layout.setSpacing(0)
+        layout = QGridLayout()
+        self.rpmLightBar = RpmLightBar()
+        layout.addWidget(self.rpmLightBar, 0, 0)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
-    #     self.topGroupBox.setLayout(layout)
+        self.topGroupBox.setLayout(layout)
 
     def createLeftGroupBox(self):
         self.leftGroupBox = QGroupBox()
@@ -157,16 +157,21 @@ class MainWindow(QDialog):
 
         layout = QGridLayout()
 
-        layout.addWidget(self.waterTempTitleValueBox, 0, 0)
-        layout.addWidget(self.oilTempTitleValueBox, 1, 0)
-        layout.addWidget(self.oilPressTitleValueBox, 1, 1)
-        layout.addWidget(self.fuelPressTitleValueBox, 0, 1)
-        layout.addWidget(self.fanSwitchStateTitleValueBox, 2, 0)
+        layout.addWidget(self.waterTempTitleValueBox, 0, 1)
+        layout.addWidget(self.oilTempTitleValueBox, 1, 1)
+        layout.addWidget(self.oilPressTitleValueBox, 2, 1)
+        layout.addWidget(self.fuelPressTitleValueBox, 3, 1)
+        layout.addWidget(self.fanSwitchStateTitleValueBox, 4, 1)
         # layout.addWidget(self.brakeBiasTitleValueBox, 2, 1)
-        layout.addWidget(self.switchStateRemiderLabel, 2, 1)
+        layout.addWidget(self.switchStateRemiderLabel, 5, 1)
+        
         layout.setRowStretch(0, 1)
         layout.setRowStretch(1, 1)
         layout.setRowStretch(2, 1)
+        layout.setRowStretch(3, 1)
+        layout.setRowStretch(4, 1)
+        layout.setRowStretch(5, 1)
+
 
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
@@ -180,13 +185,17 @@ class MainWindow(QDialog):
 
         layout = QGridLayout()
 
-        layout.addWidget(self.rpmLabel, 0, 0, 1, 2)
-        layout.addWidget(self.gearLabel, 1, 0, 1, 2)
-        layout.addWidget(self.lapTimeLabel, 2, 0, 1, 2)
+        layout.addWidget(self.rpmLabel, 0, 0, 1, 3)
+        layout.addWidget(self.gearLabel, 1, 0, 1, 3)
+        layout.addWidget(self.lapCountLabel, 2, 0, 1, 3)
+        layout.addWidget(self.tpsBar, 3, 1, 1, 2)
+        layout.addWidget(self.tpsTitleValueBox, 3, 0, 1, 1)
 
         layout.setRowStretch(0, 2)
-        layout.setRowStretch(1, 10)
-        layout.setRowStretch(2, 3)
+        layout.setRowStretch(1, 13)
+        layout.setRowStretch(2, 2)
+        layout.setRowStretch(3, 2)
+
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
@@ -203,14 +212,14 @@ class MainWindow(QDialog):
 
         layout = QGridLayout()
 
-        layout.addWidget(self.brakeBiasTitleValueBox, 0, 0, 1, 1)
-        layout.addWidget(self.tpsTitleValueBox, 1, 0, 1, 1)
-        layout.addWidget(self.tpsBar, 0, 1, 2, 1)
-        layout.addWidget(self.bpsFBar, 0, 2)
-        layout.addWidget(self.bpsFTitleValueBox, 0, 3)
-        layout.addWidget(self.bpsRBar, 1, 2)
-        layout.addWidget(self.bpsRTitleValueBox, 1, 3)
-
+        #layout.addWidget(self.brakeBiasTitleValueBox, 0, 0, 1, 1)
+        #layout.addWidget(self.tpsTitleValueBox, 1, 0, 1, 1)
+        #layout.addWidget(self.tpsBar, 0, 1, 2, 1)
+        #layout.addWidget(self.bpsFBar, 0, 2)
+        #layout.addWidget(self.bpsFTitleValueBox, 0, 3)
+        #layout.addWidget(self.bpsRBar, 1, 2)
+        #layout.addWidget(self.bpsRTitleValueBox, 1, 3)
+        #layout.addWidget(self.oilPressTitleValueBox, 2, 1)
         layout.setColumnStretch(0, 2)
         layout.setColumnStretch(1, 1)
         layout.setColumnStretch(2, 1)
