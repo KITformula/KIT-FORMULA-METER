@@ -186,6 +186,7 @@ class BrakePress:
             front = max(0.0, self.front)
             rear = max(0.0, self.rear)
             return round(100.0 * front / (front + rear), 1)
+        
 
 
 class DashMachineInfo:
@@ -200,6 +201,7 @@ class DashMachineInfo:
     fuelPress: FuelPress
     brakePress: BrakePress
 
+
     def __init__(self) -> None:
         self.rpm = Rpm(0)
         self.throttlePosition = 0.0
@@ -211,6 +213,7 @@ class DashMachineInfo:
         self.fanEnabled = False
         self.fuelPress = FuelPress(0.0)
         self.brakePress = BrakePress()
+
 
     def setRpm(self, rpm: int):
         self.rpm = Rpm(rpm)

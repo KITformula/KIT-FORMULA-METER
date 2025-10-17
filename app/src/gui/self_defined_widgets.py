@@ -399,7 +399,7 @@ class GearLabel(QCustomLabel):
     def updateGearLabel(self, gearType: GearType):
         if int(gearType) == GearType.NEUTRAL:
             self.setText("N")
-            self.setStyleSheet("font-weight: bold; color : #FD6;")
+            self.setStyleSheet("font-weight: bold; color : #5AFF19;")
         else:
             self.setText(str(int(gearType)))
             self.setStyleSheet("font-weight: bold; color : #FFF;")
