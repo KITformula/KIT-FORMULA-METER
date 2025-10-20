@@ -1,5 +1,6 @@
 import time
 from dataclasses import dataclass
+from src.fuel.fuel_calculator import FuelCalculator
 from typing import List
 
 import can
@@ -31,12 +32,15 @@ class DashInfoListener(can.Listener):
     PACKET_SIZE = 176
     HEADER = bytes([0x82, 0x81, 0x80])
 
-    def __init__(self) -> None:
+    def __init__(self, fuel_calculator: FuelCalculator) -> None:
         super().__init__()
         # 複数のCANフレームを結合するためのバッファ
         self.buffer = bytearray()
         # 解析済みの最新データを保持するためのオブジェクト
         self.dashMachineInfo = DashMachineInfo()
+        self.last_packet_timestamp: float | None = None
+        self.fuel_calculator = fuel_calculator
+
 
     def on_message_received(self, msg: can.Message) -> None:
         """NotifierからCANメッセージが届くたびに呼び出される。"""
@@ -74,6 +78,18 @@ class DashInfoListener(can.Listener):
         if calculated_crc != received_crc:
             # CRCが一致しないデータは不正とみなし、処理を中断
             return
+        
+        current_time = time.time()
+        delta_t = 0.0
+        if self.last_packet_timestamp is not None:
+            # 前回の時刻が記録されていれば、現在の時刻との差を計算
+            delta_t = current_time - self.last_packet_timestamp
+        
+        # 今回の処理時刻を「前回の時刻」として保存
+        self.last_packet_timestamp = current_time
+        
+        # 計算したdelta_tをdashMachineInfoオブジェクトに保存
+        self.dashMachineInfo.delta_t = delta_t
 
         # 6. CRCが一致した場合、データを解析し dashMachineInfo を更新
         try:
@@ -115,6 +131,14 @@ class DashInfoListener(can.Listener):
             # Fuel Effective Pulse Width (bytes 112:114, scale 0.5 µs)
             fepw_val = round(int.from_bytes(self.buffer[112:114], 'big') * 0.5, 1)
             self.dashMachineInfo.fuelEffectivePulseWidth = fepw_val
+
+              # ★★★ 4. バックグラウンドで直接、分析官に計算を依頼する ★★★
+            self.fuel_calculator.update_consumption(
+                rpm=rpm_val,
+                effective_pulse_width_us=fepw_val,
+                delta_t_sec=delta_t
+            )
+            
         except IndexError:
             # 万が一、パケットの長さが足りない場合に備えます。
             print("MoTeC Protocol: Packet parsing error due to invalid length!")

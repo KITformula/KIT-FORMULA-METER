@@ -18,8 +18,8 @@ class MockMachine:
         self.oilPressure: float = 4.5
         self.gearVoltage: float = 2.5
         self.batteryVoltage: float = 13.8
-        self.fuelPressure: float = 3.0
-        self.fuelEffectivePulseWidth: float = 0.0
+        self.fuelPressure: float = 30.0
+        self.fuelEffectivePulseWidth: float = 5.0
 
     def to_motec_set3_messages(self) -> List[can.Message]:
         """
@@ -92,15 +92,15 @@ class MockCanSender:
         """時間に応じてマシンのパラメータを擬似的に変動させる。"""
         # ミリ秒単位の整数時間をベースに計算することで、浮動小数点数の誤差を減らす
         t = int(time.time() * 1000)
-        self.machine.rpm = 1000 + (t % 12000)
+        self.machine.rpm = 2200 + (t % 12000)
         self.machine.throttlePosition = (t % 1001) / 10.0 # 1001にすることで0.0も表現
-        self.machine.engineTemperature = 80 + (t % 400) / 10.0
+        self.machine.engineTemperature = 50 + (t % 400) / 10.0
         self.machine.oilTemperature = 90 + (t % 400) / 10.0
-        self.machine.oilPressure = 1.0 + (t % 70) / 10.0
+        self.machine.oilPressure = 30.0 + (t % 70) / 0.1
         self.machine.gearVoltage = 0.5 + (t % 4501) / 1000.0
-        self.machine.batteryVoltage = 12.0 + (t % 251) / 100.0
-        self.machine.fuelPressure = 3.0 + (t % 11) / 10.0
-        self.machine.fuelEffectivePulseWidth = 800 + (t % 9200)
+        self.machine.batteryVoltage = 9.0 + (t % 500) / 100.0
+        self.machine.fuelPressure = 27.0 + (t % 100) / 10.0
+        self.machine.fuelEffectivePulseWidth = 3000+ (t % 9200)
 
     def sendEvery(self):
         """無限ループで、一定間隔ごとにCANメッセージを送信する。"""

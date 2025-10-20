@@ -7,6 +7,7 @@ import can
 
 from src.can.can_listeners import DashInfoListener, UdpPayloadListener
 from src.can.mock_can_sender import MockCanSender
+from src.fuel.fuel_calculator import FuelCalculator
 
 
 class CanMaster:
@@ -14,7 +15,7 @@ class CanMaster:
     dashInfoListener: DashInfoListener
     udpPayloadListener: UdpPayloadListener
 
-    def __init__(self) -> None:
+    def __init__(self, fuel_calculator: FuelCalculator) -> None:
         if os.getenv("DEBUG", "False").lower() == "true":
             mockCanSender = MockCanSender()
             mockCanSender.start()
@@ -38,7 +39,7 @@ class CanMaster:
             else:
                 logging.error("CAN interface can0 up failed!")
                 self.bus = can.Bus(channel="can0", interface="socketcan")
-        self.dashInfoListener = DashInfoListener()
+        self.dashInfoListener = DashInfoListener(fuel_calculator)
         self.udpPayloadListener = UdpPayloadListener()
         self.notifier = can.Notifier(
             self.bus, [self.dashInfoListener, self.udpPayloadListener]

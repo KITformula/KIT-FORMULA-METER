@@ -14,13 +14,14 @@ from src.models.models import (
     BatteryVoltage,
     GearType,
     Message,
-    OilPress,
-    OilPressStatus,
+    # OilPress,
+    # OilPressStatus,
     OilTemp,
     OilTempStatus,
     Rpm,
     WaterTemp,
     WaterTempStatus,
+    FuelPress,
 )
 
 
@@ -61,9 +62,9 @@ class TitleValueBox(QGroupBox):
         self.setStyleSheet(
             "QGroupBox#TitleValueBox { border: 2px solid #ffffff; border-radius: 3px;}"
         )
-        self.TitleFont = "Arial"
+        self.TitleFont = "Monospaced Font"
         self.titleColor = "#FD6"
-        self.valueFont = "Arial"
+        self.valueFont = "Monospaced Font"
         self.valueColor = "#FFF"
         self.titleBackgroundColor = "#000"
 
@@ -91,7 +92,7 @@ class TitleValueBox(QGroupBox):
 
         self.layout.addWidget(self.titleLabel, 0, 0)
         self.layout.addWidget(self.valueLabel, 1, 0)
-        self.layout.setRowStretch(0, 1)
+        self.layout.setRowStretch(0, 0)
         self.layout.setRowStretch(1, 2)
 
         self.layout.setContentsMargins(0, 0, 0, 0)
@@ -108,11 +109,26 @@ class TitleValueBox(QGroupBox):
         else:
             self.valueLabel.setText("OFF")
 
+    def updateTempValueLabel(self, waterTemp: WaterTemp):
+        """
+        WaterTempオブジェクトを受け取り、'℃'を付けて表示する専用メソッド
+        """
+        # hasattrで、渡されたオブジェクトが'value'属性を持つか安全にチェック
+        if hasattr(waterTemp, 'value'):
+            display_text = f"{waterTemp.value:.0f} ℃"
+        else:
+            # もし単なる数値が渡された場合にも対応
+            display_text = f"{int(waterTemp):.0f} ℃"
+        
+        self.valueLabel.setText(display_text)
+
     # --------------- update background warning color  ----------
     def updateWaterTempWarning(self, waterTemp: WaterTemp):
         if waterTemp.status == WaterTempStatus.LOW:
-            color = "#000"
+            color = "#00bfff"
         elif waterTemp.status == WaterTempStatus.MIDDLE:
+            color = "#000000"
+        elif waterTemp.status == WaterTempStatus.WARNING:
             color = "#FB0"
         elif waterTemp.status == WaterTempStatus.HIGH:
             color = "#F00"
@@ -135,19 +151,19 @@ class TitleValueBox(QGroupBox):
             + ";"
         )
 
-    def updateOilPressWarning(self, oilPress: OilPress):
-        # self.valueLabel.setText(str(round(oilPress, 2)))
-        if oilPress.status == OilPressStatus.LOW:
-            color = "#F00"
-        elif oilPress.status == OilPressStatus.MIDDLE:
-            color = "#FB0"
-        elif oilPress.status == OilPressStatus.HIGH:
-            color = "#000"
-        self.valueLabel.setStyleSheet(
-            "font-weight: bold; border-radius: 5px; color: #FFF; background-color:"
-            + color
-            + ";"
-        )
+    # def updateOilPressWarning(self, oilPress: OilPress):
+    #     # self.valueLabel.setText(str(round(oilPress, 2)))
+    #     if oilPress.status == OilPressStatus.LOW:
+    #         color = "#F00"
+    #     elif oilPress.status == OilPressStatus.MIDDLE:
+    #         color = "#FB0"
+    #     elif oilPress.status == OilPressStatus.HIGH:
+    #         color = "#000"
+    #     self.valueLabel.setStyleSheet(
+    #         "font-weight: bold; border-radius: 5px; color: #FFF; background-color:"
+    #         + color
+    #         + ";"
+    #     )
 
     def updateFanWarning(self, fanEnable: bool):
         if fanEnable:
@@ -170,16 +186,12 @@ class IconValueBox(QGroupBox):
         self.valueColor = "#FFF"
         self.layout = QGridLayout()
 
-        # ★★★★★ ここに移動します ★★★★★
-        # if文の前にvalueLabelの作成と設定を移動させることで、
-        # アイコンの有無に関わらず、必ず作成されるようにします。
         self.valueLabel = QCustomLabel()
         self.valueLabel.setAlignment(QtCore.Qt.AlignCenter)
-        self.valueLabel.setFontScale(0.6)
-        self.valueLabel.setFontFamily("Arial")
+        self.valueLabel.setFontScale(0.75)
+        self.valueLabel.setFontFamily("Monospaced Font")
         self.valueLabel.setStyleSheet("QLabel { color : " + self.valueColor + "; }")
-        # ★★★★★ ここまで ★★★★★
-
+        
         # iconPathが指定されている（Noneではない）場合
         if iconPath:
             self.iconLabel = QLabel(self)
@@ -204,11 +216,11 @@ class IconValueBox(QGroupBox):
         電圧値を受け取り、テキストの表示と色の警告を一度に行う
         """
        # "BAT " の後ろに半角スペースを入れる
-        display_text = f"BAT {batteryVoltage:.1f} V"
+        display_text = f" {batteryVoltage:.1f} V"
 
         # --- 2. 色の決定 ---
         # 次に、渡された電圧値に基づいて使用する色を決定します
-        color_to_set = "#48BB78"  # デフォルトは緑色
+        color_to_set = "#7fff00"  # デフォルトは緑色
 
         if batteryVoltage < 13.0:
             color_to_set = "#E53E3E"   # 13.0未満は赤
@@ -218,11 +230,55 @@ class IconValueBox(QGroupBox):
         # --- 3. スタイル（色）とテキストを適用 ---
         # 決定した色で、valueLabelの文字色（color）を更新します
         # 注意: フォント設定なども含めて再指定しないと、スタイルがリセットされる可能性があります
-        font_style = "font: bold 35pt 'Arial';" # 例としてフォントも再指定
-        self.valueLabel.setStyleSheet(f"color: {color_to_set}; {font_style}")
+        self.valueLabel.setStyleSheet(f"font-weight: bold; color: {color_to_set};")
         
-        # 最後に、整形したテキストをラベルに設定します
+        # 4. テキストを設定
         self.valueLabel.setText(display_text)
+    
+    def updateFuelPressValueLabel(self, fuelPress: FuelPress):
+        """
+        FuelPressオブジェクトを受け取り、'kPa'を付けて表示し、
+        圧力に応じて背景色を変更する専用メソッド
+        """
+        # --- 1. テキストの整形 ---
+        # floatを継承しているので、そのままフォーマットできる
+        display_text = f"{fuelPress:.1f} kPa"
+        new_color = "#7fff00"
+    
+        if fuelPress < 28.0:
+            new_color = "#E53E3E" # 28.0未満は赤
+        else:
+            new_color = "#7fff00" # 28.0以上は緑
+        self.valueLabel.setStyleSheet(f"font-weight: bold; color: {new_color};")
+        
+        # 4. テキストを設定
+        self.valueLabel.setText(display_text)
+
+    def updateFuelPercentLabel(self, fuel_percentage: float):
+        """
+        燃料残量パーセンテージを受け取り、'%'を付けて表示し、
+        残量に応じて文字色を変更する専用メソッド
+        """
+        # --- 1. テキストの整形 ---
+        display_text = f"{fuel_percentage:.1f} %"
+        
+        # --- 2. 色の決定 ---
+        new_color = "#7fff00" # デフォルト（緑）
+    
+        if fuel_percentage < 20.0:
+            new_color = "#E53E3E" # 20.0%未満は赤
+        elif fuel_percentage < 50.0:
+            new_color = "#ECC94B" # 20.0%以上50.0%未満は黄 (バッテリー警告などで使われる黄色)
+        else:
+            new_color = "#7fff00" # 50.0%以上は緑
+        
+        # --- 3. スタイル（色）とテキストを適用 ---
+        self.valueLabel.setStyleSheet(f"font-weight: bold; color: {new_color}; qproperty-alignment: 'AlignCenter';")
+        self.valueLabel.setText(display_text)
+
+
+    
+    
 
 
     def updateMessageLabel(self, message: Message):
@@ -429,15 +485,15 @@ class RpmLabel(QCustomLabel):
         self.setText(str(rpm))
 
 
-class LapCountLabel(QCustomLabel):
+class LapTimerLabel(QCustomLabel):
     def __init__(self):
-        super(LapCountLabel, self).__init__()
+        super(LapTimerLabel, self).__init__()
 
         self.setAlignment(QtCore.Qt.AlignCenter)
         self.setFontFamily("Monospaced Font")
         self.setFontScale(0.8)
         self.setStyleSheet("color : #ffffff; background-color: #000")
 
-    def updateLapCountLabel(self, message: Message):
+    def updateLapTimerLabel(self, message: Message):
 
         self.setText(str(round(message.laptime, 1))+"0.00")

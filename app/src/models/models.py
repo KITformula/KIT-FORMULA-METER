@@ -30,19 +30,23 @@ class Rpm(int):
 class WaterTempStatus(IntEnum):
     LOW = 0
     MIDDLE = 1
-    HIGH = 2
-
+    WARNING = 2 
+    HIGH = 3    
 
 class WaterTemp(int):
-    LOW_THRESHOLD = 100
-    HIGH_THRESHOLD = 108
+    LOW_THRESHOLD = 60
+    MIDDLE_THRESHOLD = 100
+    WARNING_THRESHOLD = 118
 
     @property
     def status(self) -> WaterTempStatus:
+        # ★★★ ステップ2: 判定ロジックをご指定の条件に変更 ★★★
         if self < self.LOW_THRESHOLD:
             return WaterTempStatus.LOW
-        elif self < self.HIGH_THRESHOLD:
+        elif self < self.MIDDLE_THRESHOLD:
             return WaterTempStatus.MIDDLE
+        elif self < self.WARNING_THRESHOLD:
+            return WaterTempStatus.WARNING
         else:
             return WaterTempStatus.HIGH
 
@@ -200,6 +204,8 @@ class DashMachineInfo:
     fanEnabled: bool
     fuelPress: FuelPress
     brakePress: BrakePress
+    fuelEffectivePulseWidth: float
+    delta_t: float # 前回の176バイトのパケットからの経過時間 (秒)
 
 
     def __init__(self) -> None:
@@ -213,6 +219,8 @@ class DashMachineInfo:
         self.fanEnabled = False
         self.fuelPress = FuelPress(0.0)
         self.brakePress = BrakePress()
+        self.fuelEffectivePulseWidth = 0.0
+        self.delta_t = 0.0
 
 
     def setRpm(self, rpm: int):
