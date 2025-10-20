@@ -11,6 +11,8 @@ from PyQt5.QtCore import Qt, QPropertyAnimation, QTimer
 
 from src.machine.machine import Machine
 from src.gui.gui import MainWindow, WindowListener
+from src.fuel.fuel_calculator import FuelCalculator
+
 
 
 
@@ -18,7 +20,10 @@ class Application(WindowListener):
 
     def __init__(self):
         super().__init__()
-        self.machine = Machine()
+        INJECTOR_FLOW_RATE: float = 186.8  # インジェクターの噴射量 (cc/min)
+        NUM_CYLINDERS: int = 4                       # エンジンの気筒数
+        self.fuel_calculator = FuelCalculator(INJECTOR_FLOW_RATE, NUM_CYLINDERS)
+        self.machine = Machine(self.fuel_calculator)
 
     def initialize(self) -> None:
         self.app = QApplication(sys.argv)
@@ -100,7 +105,17 @@ class Application(WindowListener):
 
         
     def onUpdate(self) -> None:
-        self.window.updateDashboard(
-            self.machine.canMaster.dashMachineInfo, self.machine.messenger.message
-        )
+         # a. 最新のCANデータを取得
+        dash_info = self.machine.canMaster.dashMachineInfo
+        
+        # c. 計算結果（パーセンテージ）を取得する
+        fuel_percentage = self.fuel_calculator.remaining_fuel_percent
+        
+        # d. GUIに全ての最新データを渡す
+        if hasattr(self, "window"):
+            self.window.updateDashboard(
+                dash_info, 
+                fuel_percentage, # ★★★ 計算結果を渡す
+                self.machine.messenger.message
+            )
         return super().onUpdate()

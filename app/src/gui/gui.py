@@ -14,7 +14,7 @@ from PyQt5.QtWidgets import (
 from src.gui.self_defined_widgets import (
     GearLabel,
     IconValueBox,
-    LapCountLabel,
+    LapTimerLabel,
     PedalBar,
     RpmLabel,
     RpmLightBar,
@@ -73,20 +73,20 @@ class MainWindow(QDialog):
         mainLayout.setRowStretch(1, 30)
         mainLayout.setRowStretch(2, 0)
 
-    def updateDashboard(self, dashMachineInfo: DashMachineInfo, message: Message):
+    def updateDashboard(self, dashMachineInfo: DashMachineInfo, fuel_percentage: float, message: Message):
         self.rpmLightBar.updateRpmBar(dashMachineInfo.rpm)
         self.rpmLabel.updateRpmLabel(dashMachineInfo.rpm)
         self.gearLabel.updateGearLabel(dashMachineInfo.gearVoltage.gearType)
-        self.waterTempTitleValueBox.updateValueLabel(dashMachineInfo.waterTemp)
+        self.waterTempTitleValueBox.updateTempValueLabel(dashMachineInfo.waterTemp)
         self.waterTempTitleValueBox.updateWaterTempWarning(dashMachineInfo.waterTemp)
-        self.oilTempTitleValueBox.updateValueLabel(dashMachineInfo.oilTemp)
+        self.oilTempTitleValueBox.updateTempValueLabel(dashMachineInfo.oilTemp)
         self.oilTempTitleValueBox.updateOilTempWarning(dashMachineInfo.oilTemp)
-        self.oilPressTitleValueBox.updateValueLabel(dashMachineInfo.oilPress.oilPress)
-        self.oilPressTitleValueBox.updateOilPressWarning(dashMachineInfo.oilPress)
-        self.messageIconValueBox.updateMessageLabel(message)
-        self.lapCountLabel.updateLapCountLabel(message)
-        self.timeIconValueBox.updateTime()
-        self.fuelPressTitleValueBox.updateValueLabel(dashMachineInfo.fuelPress)
+        self.opsBar.updatePedalBar(dashMachineInfo.oilPress.oilPress)
+        #self.oilPressTitleValueBox.updateOilPressWarning(dashMachineInfo.oilPress)
+        #self.messageIconValueBox.updateMessageLabel(message)
+        self.lapTimerLabel.updateLapTimerLabel(message)
+        #self.timeIconValueBox.updateTime()
+        self.fuelPressIconValueBox.updateFuelPressValueLabel(dashMachineInfo.fuelPress)
         self.fanSwitchStateTitleValueBox.updateBoolValueLabel(
             dashMachineInfo.fanEnabled
         )
@@ -96,20 +96,20 @@ class MainWindow(QDialog):
         self.bpsFTitleValueBox.updateValueLabel(dashMachineInfo.brakePress.front)
         self.bpsRTitleValueBox.updateValueLabel(dashMachineInfo.brakePress.rear)
         self.tpsBar.updatePedalBar(dashMachineInfo.throttlePosition)
-        self.bpsFBar.updatePedalBar(dashMachineInfo.brakePress.front)
-        self.bpsRBar.updatePedalBar(dashMachineInfo.brakePress.rear)
+        #self.bpsFBar.updatePedalBar(dashMachineInfo.brakePress.front)
+        #self.bpsRBar.updatePedalBar(dashMachineInfo.brakePress.rear)
         self.batteryIconValueBox.updateBatteryValueLabel(dashMachineInfo.batteryVoltage)
+        self.fuelcaluculatorIconValueBox.updateFuelPercentLabel(fuel_percentage)
 
 
     def createAllWidgets(self):
         self.rpmLabel = RpmLabel()
         self.gearLabel = GearLabel()
-        self.lapCountLabel = LapCountLabel()
+        self.lapTimerLabel = LapTimerLabel()
 
         self.waterTempTitleValueBox = TitleValueBox("Water Temp")
         self.oilTempTitleValueBox = TitleValueBox("Oil Temp")
-        self.oilPressTitleValueBox = TitleValueBox("Oil Press")
-        self.fuelPressTitleValueBox = TitleValueBox("Fuel Press")
+        self.fuelPressIconValueBox =  IconValueBox()
         self.fanSwitchStateTitleValueBox = TitleValueBox("Fan Switch")
         self.switchStateRemiderLabel = TitleValueBox(
             "SWITCH CHECK! \n1. Fan \n2. TPS MAX"
@@ -124,16 +124,19 @@ class MainWindow(QDialog):
         self.bpsRTitleValueBox = TitleValueBox("BPS R")
         self.brakeBiasTitleValueBox = TitleValueBox("Brake\nBias F%")
         self.tpsBar = PedalBar("#0F0", 100)
-        self.bpsFBar = PedalBar("#F00", 600)
-        self.bpsRBar = PedalBar("#F00", 600)
-        self.bpsRBar.setInvertedAppearance(True)
+        #self.bpsFBar = PedalBar("#F00", 600)
+        #self.bpsRBar = PedalBar("#F00", 600)
+        self.opsBar =  PedalBar("#F00", 300)
+        #self.bpsRBar.setInvertedAppearance(True)
 
         self.batteryIconValueBox = IconValueBox()
-        self.timeIconValueBox = IconValueBox("src/gui/icons/Timeicon.png")
-        self.messageIconValueBox = IconValueBox("src/gui/icons/japan.png")
-        self.messageIconValueBox.valueLabel.setAlignment(QtCore.Qt.AlignVCenter)
-        self.messageIconValueBox.layout.setColumnStretch(0, 1)
-        self.messageIconValueBox.layout.setColumnStretch(1, 6)
+        self.fuelcaluculatorIconValueBox = IconValueBox()
+        self.lapCountLabel = IconValueBox()
+        #self.timeIconValueBox = IconValueBox("src/gui/icons/Timeicon.png")
+        #self.messageIconValueBox = IconValueBox("src/gui/icons/japan.png")
+        # self.messageIconValueBox.valueLabel.setAlignment(QtCore.Qt.AlignVCenter)
+        # self.messageIconValueBox.layout.setColumnStretch(0, 1)
+        # self.messageIconValueBox.layout.setColumnStretch(1, 6)
 
     # ------------------------------Define Overall Layout Group Box---------------------
     def createTopGroupBox(self):
@@ -159,18 +162,20 @@ class MainWindow(QDialog):
 
         layout.addWidget(self.waterTempTitleValueBox, 0, 1)
         layout.addWidget(self.oilTempTitleValueBox, 1, 1)
-        layout.addWidget(self.oilPressTitleValueBox, 2, 1)
-        layout.addWidget(self.fuelPressTitleValueBox, 3, 1)
-        layout.addWidget(self.fanSwitchStateTitleValueBox, 4, 1)
+        #layout.addWidget(self.oilPressTitleValueBox, 2, 1)
+        layout.addWidget(self.batteryIconValueBox, 2, 1)
+        layout.addWidget(self.fuelPressIconValueBox, 3, 1)
+        #layout.addWidget(self.fanSwitchStateTitleValueBox, 4, 1)
+        layout.addWidget(self.fuelcaluculatorIconValueBox, 4, 1)
         # layout.addWidget(self.brakeBiasTitleValueBox, 2, 1)
-        layout.addWidget(self.switchStateRemiderLabel, 5, 1)
+        #layout.addWidget(self.switchStateRemiderLabel, 5, 1)
         
         layout.setRowStretch(0, 1)
         layout.setRowStretch(1, 1)
         layout.setRowStretch(2, 1)
         layout.setRowStretch(3, 1)
         layout.setRowStretch(4, 1)
-        layout.setRowStretch(5, 1)
+        #layout.setRowStretch(5, 1)
 
 
         layout.setContentsMargins(0, 0, 0, 0)
@@ -187,7 +192,7 @@ class MainWindow(QDialog):
 
         layout.addWidget(self.rpmLabel, 0, 0, 1, 3)
         layout.addWidget(self.gearLabel, 1, 0, 1, 3)
-        layout.addWidget(self.lapCountLabel, 2, 0, 1, 3)
+        layout.addWidget(self.lapTimerLabel, 2, 0, 1, 3)
         layout.addWidget(self.tpsBar, 3, 1, 1, 2)
         layout.addWidget(self.tpsTitleValueBox, 3, 0, 1, 1)
 
@@ -219,35 +224,38 @@ class MainWindow(QDialog):
         #layout.addWidget(self.bpsFTitleValueBox, 0, 3)
         #layout.addWidget(self.bpsRBar, 1, 2)
         #layout.addWidget(self.bpsRTitleValueBox, 1, 3)
-        #layout.addWidget(self.oilPressTitleValueBox, 2, 1)
-        layout.setColumnStretch(0, 2)
-        layout.setColumnStretch(1, 1)
-        layout.setColumnStretch(2, 1)
-        layout.setColumnStretch(3, 2)
+        layout.addWidget(self.opsBar, 0, 1, 1, 3)
+        layout.addWidget(self.lapCountLabel, 1, 1, 1, 3)
+        #layout.addWidget(self.opsBar, 0, 1, 1, 3)
+       
+        layout.setRowStretch(0, 1)
+        layout.setRowStretch(1, 2)
+        layout.setRowStretch(2, 2)
+        layout.setRowStretch(3, 2)
 
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
         self.rightGroupBox.setLayout(layout)
 
-    def createBottomGroupBox(self):
-        self.bottomGroupBox = QGroupBox()
-        self.bottomGroupBox.setFlat(True)
-        self.bottomGroupBox.setStyleSheet("border: 0px;")
+    # def createBottomGroupBox(self):
+    #     self.bottomGroupBox = QGroupBox()
+    #     self.bottomGroupBox.setFlat(True)
+    #     self.bottomGroupBox.setStyleSheet("border: 0px;")
 
-        layout = QGridLayout()
+    #     layout = QGridLayout()
 
-        layout.addWidget(self.batteryIconValueBox, 0, 0)
-        layout.addWidget(self.messageIconValueBox, 0, 1)
-        layout.addWidget(self.timeIconValueBox, 0, 2)
+    #     layout.addWidget(self.batteryIconValueBox, 0, 0)
+    #     layout.addWidget(self.messageIconValueBox, 0, 1)
+    #     layout.addWidget(self.timeIconValueBox, 0, 2)
 
-        layout.setColumnStretch(0, 1)
-        layout.setColumnStretch(1, 3)
-        layout.setColumnStretch(2, 1)
+    #     layout.setColumnStretch(0, 1)
+    #     layout.setColumnStretch(1, 3)
+    #     layout.setColumnStretch(2, 1)
 
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
+    #     layout.setContentsMargins(0, 0, 0, 0)
+    #     layout.setSpacing(0)
 
-        self.bottomGroupBox.setLayout(layout)
+    #     self.bottomGroupBox.setLayout(layout)
 
     
