@@ -14,7 +14,7 @@ from PyQt5.QtWidgets import (
 from src.gui.self_defined_widgets import (
     GearLabel,
     IconValueBox,
-    LapTimerLabel,
+    #LapTimerLabel,
     PedalBar,
     RpmLabel,
     RpmLightBar,
@@ -22,7 +22,7 @@ from src.gui.self_defined_widgets import (
 )
 from src.models.models import (
     DashMachineInfo,
-    Message,
+    #Message,
 )
 
 
@@ -69,11 +69,11 @@ class MainWindow(QDialog):
         mainLayout.setColumnStretch(0, 3)
         mainLayout.setColumnStretch(1, 2)
         mainLayout.setColumnStretch(2, 3)
-        mainLayout.setRowStretch(0, 1)
-        mainLayout.setRowStretch(1, 30)
+        mainLayout.setRowStretch(0, 0)
+        mainLayout.setRowStretch(1, 1)
         mainLayout.setRowStretch(2, 0)
 
-    def updateDashboard(self, dashMachineInfo: DashMachineInfo, fuel_percentage: float, message: Message):
+    def updateDashboard(self, dashMachineInfo: DashMachineInfo, fuel_percentage: float):
         self.rpmLightBar.updateRpmBar(dashMachineInfo.rpm)
         self.rpmLabel.updateRpmLabel(dashMachineInfo.rpm)
         self.gearLabel.updateGearLabel(dashMachineInfo.gearVoltage.gearType)
@@ -84,7 +84,7 @@ class MainWindow(QDialog):
         self.opsBar.updatePedalBar(dashMachineInfo.oilPress.oilPress)
         #self.oilPressTitleValueBox.updateOilPressWarning(dashMachineInfo.oilPress)
         #self.messageIconValueBox.updateMessageLabel(message)
-        self.lapTimerLabel.updateLapTimerLabel(message)
+        #self.lapTimerLabel.updateLapTimerLabel(message)
         #self.timeIconValueBox.updateTime()
         self.fuelPressIconValueBox.updateFuelPressValueLabel(dashMachineInfo.fuelPress)
         self.fanSwitchStateTitleValueBox.updateBoolValueLabel(
@@ -105,7 +105,7 @@ class MainWindow(QDialog):
     def createAllWidgets(self):
         self.rpmLabel = RpmLabel()
         self.gearLabel = GearLabel()
-        self.lapTimerLabel = LapTimerLabel()
+        #self.lapTimerLabel = LapTimerLabel()
 
         self.waterTempTitleValueBox = TitleValueBox("Water Temp")
         self.oilTempTitleValueBox = TitleValueBox("Oil Temp")
@@ -142,6 +142,7 @@ class MainWindow(QDialog):
     def createTopGroupBox(self):
         self.topGroupBox = QGroupBox()
         self.topGroupBox.setFlat(True)
+        self.topGroupBox.setMaximumHeight(40)
 
         layout = QGridLayout()
         self.rpmLightBar = RpmLightBar()
@@ -192,13 +193,13 @@ class MainWindow(QDialog):
 
         layout.addWidget(self.rpmLabel, 0, 0, 1, 3)
         layout.addWidget(self.gearLabel, 1, 0, 1, 3)
-        layout.addWidget(self.lapTimerLabel, 2, 0, 1, 3)
+        #layout.addWidget(self.lapTimerLabel, 2, 0, 1, 3)
         layout.addWidget(self.tpsBar, 3, 1, 1, 2)
         layout.addWidget(self.tpsTitleValueBox, 3, 0, 1, 1)
 
         layout.setRowStretch(0, 2)
         layout.setRowStretch(1, 13)
-        layout.setRowStretch(2, 2)
+        #layout.setRowStretch(2, 2)
         layout.setRowStretch(3, 2)
 
         layout.setContentsMargins(0, 0, 0, 0)

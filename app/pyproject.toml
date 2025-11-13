@@ -23,10 +23,13 @@ dev-dependencies = [
     "pytest>=8.4.2",
 ]
 
-[tool.rye.scripts]
-prod = { cmd = "python main.py", env = { DISPLAY = ":0" } }
-debug = { cmd = "python main.py", env = { DEBUG = "TRUE" } }
 
+[tool.rye.scripts]
+# debug 実行時は DEBUG="true" を明示的に設定する
+debug = { cmd = "python main.py", env = { DEBUG = "true" } }
+# prod 実行時は DEBUG="false" を明示的に設定する
+prod = { cmd = "python main.py", env = { DEBUG = "false" } }
+test = "pytest"
 
 [tool.hatch.metadata]
 allow-direct-references = true
