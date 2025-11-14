@@ -1,4 +1,4 @@
-from abc import ABCMeta, abstractmethod
+#from abc import ABCMeta, abstractmethod
 
 
 from PyQt5 import QtCore
@@ -19,6 +19,7 @@ from src.gui.self_defined_widgets import (
     RpmLabel,
     RpmLightBar,
     TitleValueBox,
+    TpmsBox,
 )
 from src.models.models import (
     DashMachineInfo,
@@ -26,8 +27,8 @@ from src.models.models import (
 )
 
 
-class WindowListener(metaclass=ABCMeta):
-    @abstractmethod
+class WindowListener:#(metaclass=ABCMeta):
+    #@abstractmethod
     def onUpdate(self) -> None:
         pass
 
@@ -69,11 +70,11 @@ class MainWindow(QDialog):
         mainLayout.setColumnStretch(0, 3)
         mainLayout.setColumnStretch(1, 2)
         mainLayout.setColumnStretch(2, 3)
-        mainLayout.setRowStretch(0, 0)
+        mainLayout.setRowStretch(0, 1)
         mainLayout.setRowStretch(1, 1)
         mainLayout.setRowStretch(2, 0)
 
-    def updateDashboard(self, dashMachineInfo: DashMachineInfo, fuel_percentage: float):
+    def updateDashboard(self, dashMachineInfo: DashMachineInfo, fuel_percentage:float ,tpms_data:dict):
         self.rpmLightBar.updateRpmBar(dashMachineInfo.rpm)
         self.rpmLabel.updateRpmLabel(dashMachineInfo.rpm)
         self.gearLabel.updateGearLabel(dashMachineInfo.gearVoltage.gearType)
@@ -100,6 +101,26 @@ class MainWindow(QDialog):
         #self.bpsRBar.updatePedalBar(dashMachineInfo.brakePress.rear)
         self.batteryIconValueBox.updateBatteryValueLabel(dashMachineInfo.batteryVoltage)
         self.fuelcaluculatorIconValueBox.updateFuelPercentLabel(fuel_percentage)
+
+        # FL (左前)
+        fl_data = tpms_data.get("FL", {}) # データがない場合は空の辞書
+        self.tpms_fl.updateTemperature(fl_data.get("temp_c"))
+        self.tpms_fl.updatePressure(fl_data.get("pressure_kpa"))
+        
+        # FR (右前)
+        fr_data = tpms_data.get("FR", {})
+        self.tpms_fr.updateTemperature(fr_data.get("temp_c"))
+        self.tpms_fr.updatePressure(fr_data.get("pressure_kpa"))
+
+        # RL (左後)
+        rl_data = tpms_data.get("RL", {})
+        self.tpms_rl.updateTemperature(rl_data.get("temp_c"))
+        self.tpms_rl.updatePressure(rl_data.get("pressure_kpa"))
+
+        # RR (右後)
+        rr_data = tpms_data.get("RR", {})
+        self.tpms_rr.updateTemperature(rr_data.get("temp_c"))
+        self.tpms_rr.updatePressure(rr_data.get("pressure_kpa"))
 
 
     def createAllWidgets(self):
@@ -132,6 +153,10 @@ class MainWindow(QDialog):
         self.batteryIconValueBox = IconValueBox()
         self.fuelcaluculatorIconValueBox = IconValueBox()
         self.lapCountLabel = IconValueBox()
+        self.tpms_fl = TpmsBox("FL")
+        self.tpms_fr = TpmsBox("FR")
+        self.tpms_rl = TpmsBox("RL")
+        self.tpms_rr = TpmsBox("RR")
         #self.timeIconValueBox = IconValueBox("src/gui/icons/Timeicon.png")
         #self.messageIconValueBox = IconValueBox("src/gui/icons/japan.png")
         # self.messageIconValueBox.valueLabel.setAlignment(QtCore.Qt.AlignVCenter)
@@ -142,7 +167,7 @@ class MainWindow(QDialog):
     def createTopGroupBox(self):
         self.topGroupBox = QGroupBox()
         self.topGroupBox.setFlat(True)
-        self.topGroupBox.setMaximumHeight(40)
+        self.topGroupBox.setMaximumHeight(60)
 
         layout = QGridLayout()
         self.rpmLightBar = RpmLightBar()
@@ -216,28 +241,42 @@ class MainWindow(QDialog):
             "QGroupBox#RightBox { border: 2px solid white;}"
         )
 
-        layout = QGridLayout()
+        tpmsGridGroup = QGroupBox("TPMS")
+        tpmsGridGroup.setFlat(True)
+        tpmsGridGroup.setStyleSheet("font-size: 16px; font-weight: bold; color: #FFF;")
 
-        #layout.addWidget(self.brakeBiasTitleValueBox, 0, 0, 1, 1)
-        #layout.addWidget(self.tpsTitleValueBox, 1, 0, 1, 1)
-        #layout.addWidget(self.tpsBar, 0, 1, 2, 1)
-        #layout.addWidget(self.bpsFBar, 0, 2)
-        #layout.addWidget(self.bpsFTitleValueBox, 0, 3)
-        #layout.addWidget(self.bpsRBar, 1, 2)
-        #layout.addWidget(self.bpsRTitleValueBox, 1, 3)
-        layout.addWidget(self.opsBar, 0, 1, 1, 3)
-        layout.addWidget(self.lapCountLabel, 1, 1, 1, 3)
-        #layout.addWidget(self.opsBar, 0, 1, 1, 3)
+        # (b) 2x2のグリッドレイアウトを作成
+        tpmsLayout = QGridLayout()
+        tpmsLayout.setContentsMargins(0, 0, 0, 0)
+        tpmsLayout.setSpacing(5) # ボックス間の隙間
+        
+        # 1段目
+        tpmsLayout.addWidget(self.tpms_fl, 0, 0)
+        tpmsLayout.addWidget(self.tpms_fr, 0, 1)
+        # 2段目
+        tpmsLayout.addWidget(self.tpms_rl, 1, 0)
+        tpmsLayout.addWidget(self.tpms_rr, 1, 1)
+        
+        tpmsGridGroup.setLayout(tpmsLayout) # グループにレイアウトをセット
+
+        # (c) rightGroupBox 全体のメインレイアウトを作成
+        mainLayout = QGridLayout()
+        mainLayout.setContentsMargins(5, 5, 5, 5)
+        mainLayout.setSpacing(5)
+
+        # 1段目: 油圧バー
+        mainLayout.addWidget(self.opsBar, 0, 0)
+        # 2段目: TPMSグリッド
+        mainLayout.addWidget(tpmsGridGroup, 1, 0)
+        # 3段目: ラップカウント
+        mainLayout.addWidget(self.lapCountLabel, 2, 0)
        
-        layout.setRowStretch(0, 1)
-        layout.setRowStretch(1, 2)
-        layout.setRowStretch(2, 2)
-        layout.setRowStretch(3, 2)
+        # 縦の比率を調整 (油圧: 1, TPMS: 4, ラップ: 2)
+        mainLayout.setRowStretch(0, 1)
+        mainLayout.setRowStretch(1, 7)
+        mainLayout.setRowStretch(2, 3)
 
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
-
-        self.rightGroupBox.setLayout(layout)
+        self.rightGroupBox.setLayout(mainLayout)
 
     # def createBottomGroupBox(self):
     #     self.bottomGroupBox = QGroupBox()

@@ -8,6 +8,7 @@ from PyQt5.QtWidgets import (
     QLabel,
     QProgressBar,
     QSizePolicy,
+    QFrame,
 )
 
 from src.models.models import (
@@ -497,3 +498,75 @@ class LapTimerLabel(QCustomLabel):
     def updateLapTimerLabel(self, message: Message):
 
         self.setText(str(round(message.laptime, 1))+"0.00")
+
+
+class TpmsBox(QGroupBox):
+    """
+    一つのタイヤのTPMS（気温・気圧）を表示する
+    カスタムウィジェット（1マス分）
+    """
+    def __init__(self, title: str):
+        super(TpmsBox, self).__init__(title)
+        
+        # --- スタイル定義 ---
+        # ★ 1. フォントファミリーに "Monospace" を指定
+        # ★ 2. フォントサイズをさらに大きく調整 (例: 40px, 32px)
+        self.temp_style_base = "font-family: 'Monospace'; font-size: 100px; font-weight: bold;"
+        self.pressure_style_base = "font-family: 'Monospace'; font-size: 40px; font-weight: bold;"
+        
+        self.color_ok = "color: #FFF;"
+        self.color_no_data = "color: #888;"
+
+        # --- ウィジェットの作成 ---
+        
+        # 1. 気温表示用のラベル
+        self.tempLabel = QLabel("---")
+        self.tempLabel.setAlignment(QtCore.Qt.AlignCenter)
+        self.tempLabel.setStyleSheet(f"{self.temp_style_base} {self.color_no_data}")
+
+        # 2. 気圧表示用のラベル
+        self.pressureLabel = QLabel("---")
+        self.pressureLabel.setAlignment(QtCore.Qt.AlignCenter)
+        self.pressureLabel.setStyleSheet(f"{self.pressure_style_base} {self.color_no_data}")
+
+        # 3. 真ん中の横線
+        self.line = QFrame()
+        self.line.setFrameShape(QFrame.HLine) # 水平線
+        self.line.setFrameShadow(QFrame.Sunken)
+        self.line.setStyleSheet("background-color: #555;")
+
+        # --- レイアウトの構築 ---
+        layout = QGridLayout()
+        layout.setContentsMargins(5, 5, 5, 5) # 内側の余白
+        layout.setSpacing(0) # ウィジェット間の隙間をゼロに
+
+        layout.addWidget(self.tempLabel, 0, 0)     # 1段目: 気温
+        layout.addWidget(self.line, 1, 0)          # 2段目: 横線
+        layout.addWidget(self.pressureLabel, 2, 0) # 3段目: 気圧
+
+        # ★ 3. 縦の比率を「温度 3 : 線 0 : 気圧 1」に（変更なし）
+        layout.setRowStretch(0, 3) # 温度
+        layout.setRowStretch(1, 0) # 線 (最小)
+        layout.setRowStretch(2, 1) # 気圧
+        
+        self.setLayout(layout)
+
+    def updateTemperature(self, temp_c: float | None):
+        """気温ラベルを更新する"""
+        if temp_c is None:
+            self.tempLabel.setText("---")
+            self.tempLabel.setStyleSheet(f"{self.temp_style_base} {self.color_no_data}")
+        else:
+            self.tempLabel.setText(f"{temp_c:.1f}C")
+            # (閾値に応じて色を変えるロジックもここに追加できる)
+            self.tempLabel.setStyleSheet(f"{self.temp_style_base} {self.color_ok}")
+
+    def updatePressure(self, pressure_kpa: float | None):
+        """気圧ラベルを更新する"""
+        if pressure_kpa is None:
+            self.pressureLabel.setText("---")
+            self.pressureLabel.setStyleSheet(f"{self.pressure_style_base} {self.color_no_data}")
+        else:
+            self.pressureLabel.setText(f"{pressure_kpa:.0f} kPa")
+            # (閾値に応じて色を変えるロジックもここに追加できる)
+            self.pressureLabel.setStyleSheet(f"{self.pressure_style_base} {self.color_ok}")

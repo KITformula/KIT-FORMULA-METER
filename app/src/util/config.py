@@ -23,3 +23,14 @@ INITIAL_FUEL_ML = float(os.environ["INITIAL_FUEL_ML"])
 # --- 燃料保存の周期を追加 ---
 # .envから読み込む。
 FUEL_SAVE_INTERVAL_MS = int(os.environ.get("FUEL_SAVE_INTERVAL_MS"))
+
+# --- TPMS設定を追加 ---
+RTL433_FREQUENCY = os.environ.get("RTL433_FREQUENCY", "429.5M")
+
+# センサーIDと表示名のマッピング
+TPMS_ID_MAP = {
+    "a61b44e3": "FR",  # 右前
+    "64f3850c": "FL",  # 左前
+    "766b4951": "RR",  # 右後
+    "74f4be1b": "RL"   # 左後
+}

@@ -1,19 +1,18 @@
 import sys
 from PyQt5.QtWidgets import QApplication
 # QTimer をインポート
-from PyQt5.QtCore import QTimer
+from PyQt5.QtCore import QTimer,pyqtSlot,QObject
 
 from src.machine.machine import Machine
 from src.gui.gui import MainWindow, WindowListener
 from src.fuel.fuel_calculator import FuelCalculator
 from src.gui.splash_screen import SplashScreen 
 from src.util import config
-
-# --- FuelStore をインポート ---
 from src.util.fuel_store import FuelStore
+from src.tpms.tpms_worker import TpmsWorker
 
 
-class Application(WindowListener):
+class Application(QObject,WindowListener):
 
     def __init__(self):
         super().__init__()
@@ -37,7 +36,17 @@ class Application(WindowListener):
         )
         
         self.machine = Machine(self.fuel_calculator)
+
+
+        self.tpms_worker = TpmsWorker(
+            frequency=config.RTL433_FREQUENCY,
+            id_map=config.TPMS_ID_MAP,
+            debug_mode=config.debug,
+        )
+        # TPMSの最新データを保持する辞書
+        self.latest_tpms_data = {}
         
+
         self.app: QApplication = None
         self.splash: SplashScreen = None
         self.window: MainWindow = None
@@ -52,6 +61,7 @@ class Application(WindowListener):
 
         # --- スプラッシュスクリーンの準備 ---
         self.splash = SplashScreen(image_path, screen_size)
+        self.tpms_worker.data_updated.connect(self.on_tpms_update)
         
         self.splash.ready_for_heavy_init.connect(self.perform_initialization)
         self.splash.fade_out_finished.connect(self.show_main_window)
@@ -59,6 +69,7 @@ class Application(WindowListener):
 
         # --- アプリ終了時に最終保存を行うシグナルを接続 ---
         self.app.aboutToQuit.connect(self.save_fuel_state)
+        self.app.aboutToQuit.connect(self.tpms_worker.stop)
 
         sys.exit(self.app.exec_())
 
@@ -73,9 +84,17 @@ class Application(WindowListener):
         self.fuel_save_timer.timeout.connect(self.save_fuel_state)
         # (修正) config から読み込んだ値を使う
         self.fuel_save_timer.start(config.FUEL_SAVE_INTERVAL_MS)
+        self.tpms_worker.start()
 
         self.splash.start_fade_out()
     
+    # --- (新設) TPMSデータ受信時のスロット ---
+    @pyqtSlot(dict)
+    def on_tpms_update(self, data: dict):
+        """TPMSワーカーからデータを受け取り、最新の状態を更新する"""
+        # 辞書をマージ (例: {"FL": ...} と {"FR": ...} を { "FL": ..., "FR": ...} に)
+        self.latest_tpms_data.update(data)
+        # print(f"TPMSデータ更新: {self.latest_tpms_data}") # (デバッグ用)
 
     def show_main_window(self):
         """(スロット) フェードアウト完了後、メインウィンドウを表示"""
@@ -96,7 +115,8 @@ class Application(WindowListener):
         if self.window is not None:
             self.window.updateDashboard(
                 dash_info, 
-                fuel_percentage, 
+                fuel_percentage,
+                self.latest_tpms_data, 
                 #self.machine.messenger.message
             )
         return super().onUpdate()

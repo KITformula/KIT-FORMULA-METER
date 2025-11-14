@@ -92,7 +92,7 @@ class MockCanSender:
         """時間に応じてマシンのパラメータを擬似的に変動させる。"""
         # ミリ秒単位の整数時間をベースに計算することで、浮動小数点数の誤差を減らす
         t = int(time.time() * 1000)
-        self.machine.rpm = 2500 #+ (t % 12000)
+        self.machine.rpm = 2500 + (t % 12000)
         self.machine.throttlePosition = (t % 1001) / 10.0 # 1001にすることで0.0も表現
         self.machine.engineTemperature = 50 + (t % 400) / 10.0
         self.machine.oilTemperature = 90 + (t % 400) / 10.0
