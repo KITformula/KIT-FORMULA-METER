@@ -2,7 +2,7 @@
 
 
 from PyQt5 import QtCore
-from PyQt5.QtCore import QTimer
+from PyQt5.QtCore import QTimer,pyqtSignal, Qt
 from PyQt5.QtGui import QColor
 from PyQt5.QtWidgets import (
     QApplication,
@@ -34,6 +34,9 @@ class WindowListener:#(metaclass=ABCMeta):
 
 
 class MainWindow(QDialog):
+
+    requestSetStartLine = pyqtSignal()
+
     def __init__(self, listener: WindowListener):
         super(MainWindow, self).__init__(None)
 
@@ -101,6 +104,13 @@ class MainWindow(QDialog):
         #self.bpsRBar.updatePedalBar(dashMachineInfo.brakePress.rear)
         self.batteryIconValueBox.updateBatteryValueLabel(dashMachineInfo.batteryVoltage)
         self.fuelcaluculatorIconValueBox.updateFuelPercentLabel(fuel_percentage)
+        self.lapTimeBox.updateValueLabel(f"{dashMachineInfo.currentLapTime:.2f}")
+        self.lapCountBox.updateValueLabel(dashMachineInfo.lapCount)
+
+        # Δタイムの正負で色を変えたり符号をつける
+        diff = dashMachineInfo.lapTimeDiff
+        sign = "+" if diff > 0 else ""
+        self.deltaBox.updateValueLabel(f"{sign}{diff:.2f}")
 
         # FL (左前)
         fl_data = tpms_data.get("FL", {}) # データがない場合は空の辞書
@@ -157,6 +167,11 @@ class MainWindow(QDialog):
         self.tpms_fr = TpmsBox("FR")
         self.tpms_rl = TpmsBox("RL")
         self.tpms_rr = TpmsBox("RR")
+
+        # 中央用: ラップタイム
+        self.lapTimeBox = TitleValueBox("Lap Time")
+        self.lapCountBox = TitleValueBox("Lap")
+        self.deltaBox = TitleValueBox("Delta")
         #self.timeIconValueBox = IconValueBox("src/gui/icons/Timeicon.png")
         #self.messageIconValueBox = IconValueBox("src/gui/icons/japan.png")
         # self.messageIconValueBox.valueLabel.setAlignment(QtCore.Qt.AlignVCenter)
@@ -217,18 +232,21 @@ class MainWindow(QDialog):
         layout = QGridLayout()
 
         layout.addWidget(self.rpmLabel, 0, 0, 1, 3)
+        # Row 1: Gear
         layout.addWidget(self.gearLabel, 1, 0, 1, 3)
-        #layout.addWidget(self.lapTimerLabel, 2, 0, 1, 3)
+        
+        # ★★★ Row 2: Lap Time (Gearの下, TPSの上) ★★★
+        layout.addWidget(self.lapTimeBox, 2, 0, 1, 3)
+
+        # Row 3: TPS (元の位置)
         layout.addWidget(self.tpsBar, 3, 1, 1, 2)
         layout.addWidget(self.tpsTitleValueBox, 3, 0, 1, 1)
 
+        # レイアウト比率調整
         layout.setRowStretch(0, 2)
-        layout.setRowStretch(1, 13)
-        #layout.setRowStretch(2, 2)
-        layout.setRowStretch(3, 2)
-
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
+        layout.setRowStretch(1, 10) # Gearを大きく
+        layout.setRowStretch(2, 4)  # LapTime
+        layout.setRowStretch(3, 2)  # TPS
 
         self.centerGroupBox.setLayout(layout)
 
@@ -259,24 +277,39 @@ class MainWindow(QDialog):
         
         tpmsGridGroup.setLayout(tpmsLayout) # グループにレイアウトをセット
 
-        # (c) rightGroupBox 全体のメインレイアウトを作成
         mainLayout = QGridLayout()
         mainLayout.setContentsMargins(5, 5, 5, 5)
         mainLayout.setSpacing(5)
 
-        # 1段目: 油圧バー
+        # Row 0: 油圧バー
         mainLayout.addWidget(self.opsBar, 0, 0)
-        # 2段目: TPMSグリッド
-        mainLayout.addWidget(tpmsGridGroup, 1, 0)
-        # 3段目: ラップカウント
-        mainLayout.addWidget(self.lapCountLabel, 2, 0)
-       
-        # 縦の比率を調整 (油圧: 1, TPMS: 4, ラップ: 2)
-        mainLayout.setRowStretch(0, 1)
-        mainLayout.setRowStretch(1, 7)
-        mainLayout.setRowStretch(2, 3)
+        
+        # ★★★ Row 1: ラップカウントとDelta (油圧の下、TPMSの上) ★★★
+        # 横並びにするためのサブレイアウト
+        lapInfoLayout = QGridLayout()
+        lapInfoLayout.addWidget(self.lapCountBox, 0, 0)
+        lapInfoLayout.addWidget(self.deltaBox, 0, 1)
+        
+        # サブレイアウトを保持するコンテナWidgetを作る必要があるが、
+        # 簡易的に addLayout で追加も可能 (QGridLayoutなら)
+        mainLayout.addLayout(lapInfoLayout, 1, 0)
+
+        # Row 2: TPMS Grid
+        mainLayout.addWidget(tpmsGridGroup, 2, 0) # tpmsGridGroupは既存コードで作成済みとする
+
+        # 比率調整
+        mainLayout.setRowStretch(0, 1) # OPS
+        mainLayout.setRowStretch(1, 2) # Lap info
+        mainLayout.setRowStretch(2, 7) # TPMS
 
         self.rightGroupBox.setLayout(mainLayout)
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key_Space:
+            # 親(Application)に通知
+            self.requestSetStartLine.emit()
+        else:
+            super().keyPressEvent(event)
 
     # def createBottomGroupBox(self):
     #     self.bottomGroupBox = QGroupBox()

@@ -194,6 +194,11 @@ class BrakePress:
 
 
 class DashMachineInfo:
+    lapCount: int
+    currentLapTime: float  # リアルタイムの経過時間または確定したラップタイム
+    lapTimeDiff: float     # 前周との差 (Δタイム)
+    gpsQuality: int        # GPS品質 (0=不可, 1=単独, 4=RTKなど
+
     rpm: Rpm
     throttlePosition: float
     waterTemp: WaterTemp
@@ -204,6 +209,7 @@ class DashMachineInfo:
     fanEnabled: bool
     fuelPress: FuelPress
     brakePress: BrakePress
+
     fuelEffectivePulseWidth: float
     delta_t: float # 前回の176バイトのパケットからの経過時間 (秒)
 
@@ -221,6 +227,10 @@ class DashMachineInfo:
         self.brakePress = BrakePress()
         self.fuelEffectivePulseWidth = 0.0
         self.delta_t = 0.0
+        self.lapCount = 0
+        self.currentLapTime = 0.0
+        self.lapTimeDiff = 0.0
+        self.gpsQuality = 0
 
 
     def setRpm(self, rpm: int):
