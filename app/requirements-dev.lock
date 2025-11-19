@@ -11,6 +11,7 @@
 
 -e file:.
 certifi==2024.2.2
+    # via influxdb-client
     # via requests
 charset-normalizer==3.3.2
     # via requests
@@ -18,6 +19,8 @@ colorama==0.4.6
     # via pytest
 idna==3.7
     # via requests
+influxdb-client==1.49.0
+    # via kart-machine-manager
 iniconfig==2.1.0
     # via pytest
 mypy==1.9.0
@@ -41,17 +44,27 @@ pyserial==3.5
 pytest==8.4.2
 python-can==4.3.1
     # via kart-machine-manager
+python-dateutil==2.9.0.post0
+    # via influxdb-client
 python-dotenv==1.1.1
     # via kart-machine-manager
 pywin32==311
     # via python-can
+reactivex==4.1.0
+    # via influxdb-client
 requests==2.31.0
     # via kart-machine-manager
 ruff==0.4.1
+setuptools==80.9.0
+    # via influxdb-client
+six==1.17.0
+    # via python-dateutil
 typing-extensions==4.11.0
     # via mypy
     # via python-can
+    # via reactivex
 urllib3==2.2.1
+    # via influxdb-client
     # via requests
 wrapt==1.16.0
     # via python-can
