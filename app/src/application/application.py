@@ -12,7 +12,7 @@ from src.gui.gui import MainWindow, WindowListener
 from src.gui.splash_screen import SplashScreen
 from src.machine.machine import Machine
 
-# ★修正点1: MQTT Senderとインターフェースをインポート (InfluxDB等は削除)
+from src.logger.csv_logger import CsvLogger
 from src.telemetry.mqtt_sender import MqttTelemetrySender
 from src.telemetry.sender_interface import TelemetrySender
 from src.tpms.tpms_worker import TpmsWorker
@@ -50,6 +50,8 @@ class Application(QObject, WindowListener):
             current_remaining_ml=current_start_ml,
         )
         self.machine = Machine(self.fuel_calculator)
+
+        self.csv_logger = CsvLogger(base_dir="logs")
 
         # ★修正点2: テレメトリ送信機をMQTT実装に一本化
         # ここで新しいMqttTelemetrySenderを生成します
@@ -127,6 +129,9 @@ class Application(QObject, WindowListener):
         self.save_fuel_state()
 
         # 各ワーカーと送信機を安全に停止
+        if self.csv_logger.is_active:
+            self.csv_logger.stop()
+
         if self.tpms_worker:
             self.tpms_worker.stop()
 
@@ -135,6 +140,8 @@ class Application(QObject, WindowListener):
 
         if not config.debug and self.gps_worker:
             self.gps_worker.stop()
+
+    
 
     def perform_initialization(self):
         """(スロット) 実際の初期化処理"""
@@ -192,21 +199,51 @@ class Application(QObject, WindowListener):
             if hasattr(dash_info, "currentLapTime") and self.last_lap_time:
                 current_lap_duration = time.monotonic() - self.last_lap_time
                 dash_info.currentLapTime = current_lap_duration
+            
+        # --- ★追加: CSVロガーの制御 (50ms間隔) ---
+        current_rpm = int(dash_info.rpm)
+        
+        # エンジン始動判定 (500rpm以上)
+        if current_rpm >= 500:
+            # まだ記録していなければ開始 (ファイル作成 & ヘッダー書き込み)
+            if not self.csv_logger.is_active:
+                self.csv_logger.start()
+            
+            # データを準備
+            # TPMSデータは受信していない場合もあるので .get() で安全に取得 (デフォルト値 0.0)
+            fl_temp = self.latest_tpms_data.get("FL", {}).get("temp_c", 0.0)
+            fr_temp = self.latest_tpms_data.get("FR", {}).get("temp_c", 0.0)
+            rl_temp = self.latest_tpms_data.get("RL", {}).get("temp_c", 0.0)
+            rr_temp = self.latest_tpms_data.get("RR", {}).get("temp_c", 0.0)
 
-        # --- ★ データの送信 ---
-        # GUI更新周期(50ms)に合わせてデータを送信します。
-        # mqtt_sender.py の send() メソッド内の time.sleep() は削除されている前提です。
-        # これにより、GUIスレッドをブロックすることなくスムーズに送信できます。
+            # ロガーに全てのデータを渡す
+            self.csv_logger.log(
+                rpm=current_rpm,
+                throttle=dash_info.throttlePosition,
+                water_temp=int(dash_info.waterTemp),
+                oil_press=dash_info.oilPress.oilPress,
+                gear=int(dash_info.gearVoltage.gearType), # ギアは数値(0=N, 1=1速...)で記録
+                fl_temp=fl_temp,
+                fr_temp=fr_temp,
+                rl_temp=rl_temp,
+                rr_temp=rr_temp
+            )
+            
+        else:
+            if self.csv_logger.is_active:
+                self.csv_logger.stop()
 
-        # デバッグログ: 頻繁に出すぎないよう間引いて表示 (2秒に1回程度)
-        if self.update_count % 40 == 0:
-            logger.debug(f"onUpdate calling send(): RPM={dash_info.rpm}")
+        if dash_info.rpm >= 500:
+            # エンジン回転数が 500 RPM 以上の時のみ送信する
+            
+            if self.update_count % 40 == 0:
+                logger.debug(f"onUpdate calling send(): RPM={dash_info.rpm}")
 
-        self.telemetry_sender.send(
-            info=dash_info,
-            fuel_percent=fuel_percentage,
-            tpms_data=self.latest_tpms_data,
-        )
+            self.telemetry_sender.send(
+                info=dash_info,
+                fuel_percent=fuel_percentage,
+                tpms_data=self.latest_tpms_data,
+            )
 
         # GUI更新
         if self.window is not None:

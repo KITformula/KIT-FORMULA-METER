@@ -10,3 +10,7 @@ wheels/
 .venv
 
 fuel_state.json
+
+# Logs
+logs/
+*.csv
