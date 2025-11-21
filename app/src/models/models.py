@@ -40,7 +40,6 @@ class WaterTemp(int):
 
     @property
     def status(self) -> WaterTempStatus:
-        # ★★★ ステップ2: 判定ロジックをご指定の条件に変更 ★★★
         if self < self.LOW_THRESHOLD:
             return WaterTempStatus.LOW
         elif self < self.MIDDLE_THRESHOLD:
@@ -90,7 +89,6 @@ class OilPress:
 
     @property
     def status(self) -> OilPressStatus:
-        # requiredOilPress = self.COEFFICIENT_HIGH * self.rpm**2
         if self.oilPress < self.COEFFICIENT_LOW * self.rpm**2:
             return OilPressStatus.LOW
         elif self.oilPress < self.COEFFICIENT_HIGH * self.rpm**2:
@@ -192,14 +190,17 @@ class BrakePress:
             return round(100.0 * front / (front + rear), 1)
         
 
-
 class DashMachineInfo:
+    """
+    車両の全情報を保持するデータクラス
+    """
     lapCount: int
     currentLapTime: float  # リアルタイムの経過時間または確定したラップタイム
     lapTimeDiff: float     # 前周との差 (Δタイム)
-    gpsQuality: int        # GPS品質 (0=不可, 1=単独, 4=RTKなど
+    gpsQuality: int        # GPS品質
 
     rpm: Rpm
+    speed: float           # ★追加: 速度フィールドを明示的に追加
     throttlePosition: float
     waterTemp: WaterTemp
     oilTemp: OilTemp
@@ -211,11 +212,11 @@ class DashMachineInfo:
     brakePress: BrakePress
 
     fuelEffectivePulseWidth: float
-    delta_t: float # 前回の176バイトのパケットからの経過時間 (秒)
-
+    delta_t: float # 前回のパケットからの経過時間
 
     def __init__(self) -> None:
         self.rpm = Rpm(0)
+        self.speed = 0.0  # ★初期化
         self.throttlePosition = 0.0
         self.waterTemp = WaterTemp(0)
         self.oilTemp = OilTemp(0)
@@ -231,12 +232,42 @@ class DashMachineInfo:
         self.currentLapTime = 0.0
         self.lapTimeDiff = 0.0
         self.gpsQuality = 0
-
+        # 前回のラップタイム記録用（必要であれば）
+        self.lastLapTime = 0.0 
 
     def setRpm(self, rpm: int):
         self.rpm = Rpm(rpm)
         self.oilPress.rpm = rpm
 
+    def to_telemetry_payload(self) -> dict:
+        """
+        ★洗練ポイント: MQTT送信用の軽量JSON辞書を生成するメソッド
+        送信ロジック側でガチャガチャ変換するのではなく、データ自身に変換させる。
+        """
+        gear_val = self.gearVoltage.gearType.value
+        gear_str = "N" if gear_val == 0 else str(gear_val)
+
+        return {
+            # 基本情報
+            "rpm": int(self.rpm),
+            "spd": round(float(self.speed), 1),
+            "gr": gear_str,
+            
+            # エンジン・センサー (小数点1桁に丸めて軽量化)
+            "wt": round(float(self.waterTemp), 1),
+            "ot": round(float(self.oilTemp), 1),
+            "tp": round(float(self.throttlePosition), 1),
+            "op": round(float(self.oilPress.oilPress), 2), # 油圧はクラス内の属性を参照
+            "v":  round(float(self.batteryVoltage), 1),
+            
+            # ラップタイム関連
+            "lc":  int(self.lapCount),
+            "clt": round(float(self.currentLapTime), 2),
+            "ltd": round(float(self.lapTimeDiff), 2),
+            
+            # その他（必要なら追加）
+            "fp": round(float(self.fuelPress), 1),
+        }
 
 class Message:
     text: str
@@ -245,7 +276,3 @@ class Message:
     def __init__(self) -> None:
         self.text = ""
         self.laptime = 0.0
-
-
-# class LapTime(timedelta):
-#     pass

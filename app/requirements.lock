@@ -21,6 +21,8 @@ influxdb-client==1.49.0
     # via kart-machine-manager
 packaging==24.0
     # via python-can
+paho-mqtt==2.1.0
+    # via kart-machine-manager
 pyqt5==5.15.10
     # via kart-machine-manager
 pyqt5-qt5==5.15.2
@@ -51,5 +53,7 @@ typing-extensions==4.11.0
 urllib3==2.2.1
     # via influxdb-client
     # via requests
+websockets==15.0.1
+    # via kart-machine-manager
 wrapt==1.16.0
     # via python-can

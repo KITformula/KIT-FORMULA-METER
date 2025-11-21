@@ -14,9 +14,9 @@ from src.util import config
 from src.util.fuel_store import FuelStore
 from src.tpms.tpms_worker import TpmsWorker
 
-# ★ SOLID: 抽象(Interface)と具象(Implementation)をインポート
+# ★修正点1: MQTT Senderとインターフェースをインポート (InfluxDB等は削除)
+from src.telemetry.mqtt_sender import MqttTelemetrySender
 from src.telemetry.sender_interface import TelemetrySender
-from src.telemetry.influx_impl import InfluxDbSender
 
 # ロガー取得
 logger = logging.getLogger(__name__)
@@ -48,6 +48,10 @@ class Application(QObject, WindowListener):
         )
         self.machine = Machine(self.fuel_calculator)
 
+        # ★修正点2: テレメトリ送信機をMQTT実装に一本化
+        # ここで新しいMqttTelemetrySenderを生成します
+        self.telemetry_sender: TelemetrySender = MqttTelemetrySender()
+
         # --- 2. TPMS Worker ---
         self.tpms_worker = TpmsWorker(
             frequency=config.RTL433_FREQUENCY,
@@ -63,6 +67,10 @@ class Application(QObject, WindowListener):
         # 状態保持用
         self.lap_count = 0
         self.previous_lap_time = 0.0
+        self.lap_target_coords = None
+        self.last_lap_time = time.monotonic()
+        self.is_outside_lap_zone = True
+        self.current_gps_data = {}
         
         if config.debug:
             print("★ GPSワーカーはモックモードで起動します ★")
@@ -74,11 +82,6 @@ class Application(QObject, WindowListener):
             self.gps_port = getattr(config, "GPS_PORT", "COM6")
             self.gps_baud = getattr(config, "GPS_BAUD", 115200)
             self.gps_worker = GpsWorker(self.gps_port, self.gps_baud)
-            
-            self.lap_target_coords = None
-            self.last_lap_time = time.monotonic()
-            self.is_outside_lap_zone = True
-            self.current_gps_data = {}
 
         # --- 4. Qtオブジェクト ---
         self.app: QApplication = None
@@ -86,9 +89,6 @@ class Application(QObject, WindowListener):
         self.window: MainWindow = None
         self.fuel_save_timer = QTimer()
 
-        # --- 5. Telemetry Sender (依存性の注入) ---
-        self.telemetry_sender: TelemetrySender = InfluxDbSender()
-        
         # ログ間引き用のカウンタ
         self.update_count = 0
 
@@ -113,15 +113,25 @@ class Application(QObject, WindowListener):
         self.splash.start()
 
         # --- アプリ終了シグナル ---
-        self.app.aboutToQuit.connect(self.save_fuel_state)
-        self.app.aboutToQuit.connect(self.tpms_worker.stop)
-        # ★ 送信スレッドも安全に停止する
-        self.app.aboutToQuit.connect(self.telemetry_sender.stop)
-        
-        if not config.debug and self.gps_worker:
-            self.app.aboutToQuit.connect(self.gps_worker.stop)
+        # 終了処理を一箇所にまとめた cleanup メソッドを呼ぶように変更
+        self.app.aboutToQuit.connect(self.cleanup)
 
         sys.exit(self.app.exec_())
+
+    def cleanup(self):
+        """アプリケーション終了時の後始末を一括で行う"""
+        logger.info("Application shutting down...")
+        self.save_fuel_state()
+        
+        # 各ワーカーと送信機を安全に停止
+        if self.tpms_worker:
+            self.tpms_worker.stop()
+        
+        if self.telemetry_sender:
+            self.telemetry_sender.stop() # MQTT切断処理 (Clean Session=Trueならここでセッション削除)
+            
+        if not config.debug and self.gps_worker:
+            self.gps_worker.stop()
 
     def perform_initialization(self):
         """(スロット) 実際の初期化処理"""
@@ -179,12 +189,14 @@ class Application(QObject, WindowListener):
                 current_lap_duration = time.monotonic() - self.last_lap_time
                 dash_info.currentLapTime = current_lap_duration
 
-        # --- ★ SOLID: データの送信 (ここが抜けていました！) ---
-        # データを Sender に渡すだけ。変換や送信の詳細は InfluxDbSender が行う。
+        # --- ★ データの送信 ---
+        # GUI更新周期(50ms)に合わせてデータを送信します。
+        # mqtt_sender.py の send() メソッド内の time.sleep() は削除されている前提です。
+        # これにより、GUIスレッドをブロックすることなくスムーズに送信できます。
         
-        # デバッグログ: 確実に呼ばれているか確認 (20回に1回表示)
-        if self.update_count % 20 == 0:
-             logger.debug(f"onUpdate calling send(): RPM={dash_info.rpm}")
+        # デバッグログ: 頻繁に出すぎないよう間引いて表示 (2秒に1回程度)
+        if self.update_count % 40 == 0: 
+              logger.debug(f"onUpdate calling send(): RPM={dash_info.rpm}")
 
         self.telemetry_sender.send(
             info=dash_info,
