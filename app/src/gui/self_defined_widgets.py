@@ -512,10 +512,10 @@ class TpmsBox(QGroupBox):
         # ★ 1. フォントファミリーに "Monospace" を指定
         # ★ 2. フォントサイズをさらに大きく調整 (例: 40px, 32px)
         self.temp_style_base = (
-            "font-family: 'Monospace'; font-size: 100px; font-weight: bold;"
+            "font-family: 'Monospace'; font-size: 40px; font-weight: bold;"
         )
         self.pressure_style_base = (
-            "font-family: 'Monospace'; font-size: 40px; font-weight: bold;"
+            "font-family: 'Monospace'; font-size: 20px; font-weight: bold;"
         )
 
         self.color_ok = "color: #FFF;"
