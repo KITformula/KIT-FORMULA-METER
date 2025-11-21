@@ -1,8 +1,8 @@
-#from abc import ABCMeta, abstractmethod
+# from abc import ABCMeta, abstractmethod
 
 
 from PyQt5 import QtCore
-from PyQt5.QtCore import QTimer,pyqtSignal, Qt
+from PyQt5.QtCore import Qt, QTimer, pyqtSignal
 from PyQt5.QtGui import QColor
 from PyQt5.QtWidgets import (
     QApplication,
@@ -14,7 +14,7 @@ from PyQt5.QtWidgets import (
 from src.gui.self_defined_widgets import (
     GearLabel,
     IconValueBox,
-    #LapTimerLabel,
+    # LapTimerLabel,
     PedalBar,
     RpmLabel,
     RpmLightBar,
@@ -23,18 +23,17 @@ from src.gui.self_defined_widgets import (
 )
 from src.models.models import (
     DashMachineInfo,
-    #Message,
+    # Message,
 )
 
 
-class WindowListener:#(metaclass=ABCMeta):
-    #@abstractmethod
+class WindowListener:  # (metaclass=ABCMeta):
+    # @abstractmethod
     def onUpdate(self) -> None:
         pass
 
 
 class MainWindow(QDialog):
-
     requestSetStartLine = pyqtSignal()
 
     def __init__(self, listener: WindowListener):
@@ -51,14 +50,14 @@ class MainWindow(QDialog):
         palette = QApplication.palette()
         palette.setColor(self.backgroundRole(), QColor("#000"))
         palette.setColor(self.foregroundRole(), QColor("#FFF"))
-        self.setPalette(palette)#画面背景と文字設定
+        self.setPalette(palette)  # 画面背景と文字設定
 
         self.createAllWidgets()
         self.createTopGroupBox()
         self.createLeftGroupBox()
         self.createCenterGroupBox()
         self.createRightGroupBox()
-        #self.createBottomGroupBox()
+        # self.createBottomGroupBox()
 
         mainLayout = QGridLayout()
         mainLayout.setContentsMargins(0, 0, 0, 0)
@@ -68,7 +67,7 @@ class MainWindow(QDialog):
         mainLayout.addWidget(self.leftGroupBox, 1, 0, 1, 1)
         mainLayout.addWidget(self.centerGroupBox, 1, 1, 1, 1)
         mainLayout.addWidget(self.rightGroupBox, 1, 2, 1, 1)
-        #mainLayout.addWidget(self.bottomGroupBox, 2, 0, 1, 3)
+        # mainLayout.addWidget(self.bottomGroupBox, 2, 0, 1, 3)
 
         mainLayout.setColumnStretch(0, 3)
         mainLayout.setColumnStretch(1, 2)
@@ -77,7 +76,9 @@ class MainWindow(QDialog):
         mainLayout.setRowStretch(1, 1)
         mainLayout.setRowStretch(2, 0)
 
-    def updateDashboard(self, dashMachineInfo: DashMachineInfo, fuel_percentage:float ,tpms_data:dict):
+    def updateDashboard(
+        self, dashMachineInfo: DashMachineInfo, fuel_percentage: float, tpms_data: dict
+    ):
         self.rpmLightBar.updateRpmBar(dashMachineInfo.rpm)
         self.rpmLabel.updateRpmLabel(dashMachineInfo.rpm)
         self.gearLabel.updateGearLabel(dashMachineInfo.gearVoltage.gearType)
@@ -86,10 +87,10 @@ class MainWindow(QDialog):
         self.oilTempTitleValueBox.updateTempValueLabel(dashMachineInfo.oilTemp)
         self.oilTempTitleValueBox.updateOilTempWarning(dashMachineInfo.oilTemp)
         self.opsBar.updatePedalBar(dashMachineInfo.oilPress.oilPress)
-        #self.oilPressTitleValueBox.updateOilPressWarning(dashMachineInfo.oilPress)
-        #self.messageIconValueBox.updateMessageLabel(message)
-        #self.lapTimerLabel.updateLapTimerLabel(message)
-        #self.timeIconValueBox.updateTime()
+        # self.oilPressTitleValueBox.updateOilPressWarning(dashMachineInfo.oilPress)
+        # self.messageIconValueBox.updateMessageLabel(message)
+        # self.lapTimerLabel.updateLapTimerLabel(message)
+        # self.timeIconValueBox.updateTime()
         self.fuelPressIconValueBox.updateFuelPressValueLabel(dashMachineInfo.fuelPress)
         self.fanSwitchStateTitleValueBox.updateBoolValueLabel(
             dashMachineInfo.fanEnabled
@@ -100,8 +101,8 @@ class MainWindow(QDialog):
         self.bpsFTitleValueBox.updateValueLabel(dashMachineInfo.brakePress.front)
         self.bpsRTitleValueBox.updateValueLabel(dashMachineInfo.brakePress.rear)
         self.tpsBar.updatePedalBar(dashMachineInfo.throttlePosition)
-        #self.bpsFBar.updatePedalBar(dashMachineInfo.brakePress.front)
-        #self.bpsRBar.updatePedalBar(dashMachineInfo.brakePress.rear)
+        # self.bpsFBar.updatePedalBar(dashMachineInfo.brakePress.front)
+        # self.bpsRBar.updatePedalBar(dashMachineInfo.brakePress.rear)
         self.batteryIconValueBox.updateBatteryValueLabel(dashMachineInfo.batteryVoltage)
         self.fuelcaluculatorIconValueBox.updateFuelPercentLabel(fuel_percentage)
         self.lapTimeBox.updateValueLabel(f"{dashMachineInfo.currentLapTime:.2f}")
@@ -113,10 +114,10 @@ class MainWindow(QDialog):
         self.deltaBox.updateValueLabel(f"{sign}{diff:.2f}")
 
         # FL (左前)
-        fl_data = tpms_data.get("FL", {}) # データがない場合は空の辞書
+        fl_data = tpms_data.get("FL", {})  # データがない場合は空の辞書
         self.tpms_fl.updateTemperature(fl_data.get("temp_c"))
         self.tpms_fl.updatePressure(fl_data.get("pressure_kpa"))
-        
+
         # FR (右前)
         fr_data = tpms_data.get("FR", {})
         self.tpms_fr.updateTemperature(fr_data.get("temp_c"))
@@ -132,15 +133,14 @@ class MainWindow(QDialog):
         self.tpms_rr.updateTemperature(rr_data.get("temp_c"))
         self.tpms_rr.updatePressure(rr_data.get("pressure_kpa"))
 
-
     def createAllWidgets(self):
         self.rpmLabel = RpmLabel()
         self.gearLabel = GearLabel()
-        #self.lapTimerLabel = LapTimerLabel()
+        # self.lapTimerLabel = LapTimerLabel()
 
         self.waterTempTitleValueBox = TitleValueBox("Water Temp")
         self.oilTempTitleValueBox = TitleValueBox("Oil Temp")
-        self.fuelPressIconValueBox =  IconValueBox()
+        self.fuelPressIconValueBox = IconValueBox()
         self.fanSwitchStateTitleValueBox = TitleValueBox("Fan Switch")
         self.switchStateRemiderLabel = TitleValueBox(
             "SWITCH CHECK! \n1. Fan \n2. TPS MAX"
@@ -155,10 +155,10 @@ class MainWindow(QDialog):
         self.bpsRTitleValueBox = TitleValueBox("BPS R")
         self.brakeBiasTitleValueBox = TitleValueBox("Brake\nBias F%")
         self.tpsBar = PedalBar("#0F0", 100)
-        #self.bpsFBar = PedalBar("#F00", 600)
-        #self.bpsRBar = PedalBar("#F00", 600)
-        self.opsBar =  PedalBar("#F00", 300)
-        #self.bpsRBar.setInvertedAppearance(True)
+        # self.bpsFBar = PedalBar("#F00", 600)
+        # self.bpsRBar = PedalBar("#F00", 600)
+        self.opsBar = PedalBar("#F00", 300)
+        # self.bpsRBar.setInvertedAppearance(True)
 
         self.batteryIconValueBox = IconValueBox()
         self.fuelcaluculatorIconValueBox = IconValueBox()
@@ -172,8 +172,8 @@ class MainWindow(QDialog):
         self.lapTimeBox = TitleValueBox("Lap Time")
         self.lapCountBox = TitleValueBox("Lap")
         self.deltaBox = TitleValueBox("Delta")
-        #self.timeIconValueBox = IconValueBox("src/gui/icons/Timeicon.png")
-        #self.messageIconValueBox = IconValueBox("src/gui/icons/japan.png")
+        # self.timeIconValueBox = IconValueBox("src/gui/icons/Timeicon.png")
+        # self.messageIconValueBox = IconValueBox("src/gui/icons/japan.png")
         # self.messageIconValueBox.valueLabel.setAlignment(QtCore.Qt.AlignVCenter)
         # self.messageIconValueBox.layout.setColumnStretch(0, 1)
         # self.messageIconValueBox.layout.setColumnStretch(1, 6)
@@ -203,21 +203,20 @@ class MainWindow(QDialog):
 
         layout.addWidget(self.waterTempTitleValueBox, 0, 1)
         layout.addWidget(self.oilTempTitleValueBox, 1, 1)
-        #layout.addWidget(self.oilPressTitleValueBox, 2, 1)
+        # layout.addWidget(self.oilPressTitleValueBox, 2, 1)
         layout.addWidget(self.batteryIconValueBox, 2, 1)
         layout.addWidget(self.fuelPressIconValueBox, 3, 1)
-        #layout.addWidget(self.fanSwitchStateTitleValueBox, 4, 1)
+        # layout.addWidget(self.fanSwitchStateTitleValueBox, 4, 1)
         layout.addWidget(self.fuelcaluculatorIconValueBox, 4, 1)
         # layout.addWidget(self.brakeBiasTitleValueBox, 2, 1)
-        #layout.addWidget(self.switchStateRemiderLabel, 5, 1)
-        
+        # layout.addWidget(self.switchStateRemiderLabel, 5, 1)
+
         layout.setRowStretch(0, 1)
         layout.setRowStretch(1, 1)
         layout.setRowStretch(2, 1)
         layout.setRowStretch(3, 1)
         layout.setRowStretch(4, 1)
-        #layout.setRowStretch(5, 1)
-
+        # layout.setRowStretch(5, 1)
 
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
@@ -234,7 +233,7 @@ class MainWindow(QDialog):
         layout.addWidget(self.rpmLabel, 0, 0, 1, 3)
         # Row 1: Gear
         layout.addWidget(self.gearLabel, 1, 0, 1, 3)
-        
+
         # ★★★ Row 2: Lap Time (Gearの下, TPSの上) ★★★
         layout.addWidget(self.lapTimeBox, 2, 0, 1, 3)
 
@@ -244,7 +243,7 @@ class MainWindow(QDialog):
 
         # レイアウト比率調整
         layout.setRowStretch(0, 2)
-        layout.setRowStretch(1, 10) # Gearを大きく
+        layout.setRowStretch(1, 10)  # Gearを大きく
         layout.setRowStretch(2, 4)  # LapTime
         layout.setRowStretch(3, 2)  # TPS
 
@@ -266,16 +265,16 @@ class MainWindow(QDialog):
         # (b) 2x2のグリッドレイアウトを作成
         tpmsLayout = QGridLayout()
         tpmsLayout.setContentsMargins(0, 0, 0, 0)
-        tpmsLayout.setSpacing(5) # ボックス間の隙間
-        
+        tpmsLayout.setSpacing(5)  # ボックス間の隙間
+
         # 1段目
         tpmsLayout.addWidget(self.tpms_fl, 0, 0)
         tpmsLayout.addWidget(self.tpms_fr, 0, 1)
         # 2段目
         tpmsLayout.addWidget(self.tpms_rl, 1, 0)
         tpmsLayout.addWidget(self.tpms_rr, 1, 1)
-        
-        tpmsGridGroup.setLayout(tpmsLayout) # グループにレイアウトをセット
+
+        tpmsGridGroup.setLayout(tpmsLayout)  # グループにレイアウトをセット
 
         mainLayout = QGridLayout()
         mainLayout.setContentsMargins(5, 5, 5, 5)
@@ -283,24 +282,26 @@ class MainWindow(QDialog):
 
         # Row 0: 油圧バー
         mainLayout.addWidget(self.opsBar, 0, 0)
-        
+
         # ★★★ Row 1: ラップカウントとDelta (油圧の下、TPMSの上) ★★★
         # 横並びにするためのサブレイアウト
         lapInfoLayout = QGridLayout()
         lapInfoLayout.addWidget(self.lapCountBox, 0, 0)
         lapInfoLayout.addWidget(self.deltaBox, 0, 1)
-        
+
         # サブレイアウトを保持するコンテナWidgetを作る必要があるが、
         # 簡易的に addLayout で追加も可能 (QGridLayoutなら)
         mainLayout.addLayout(lapInfoLayout, 1, 0)
 
         # Row 2: TPMS Grid
-        mainLayout.addWidget(tpmsGridGroup, 2, 0) # tpmsGridGroupは既存コードで作成済みとする
+        mainLayout.addWidget(
+            tpmsGridGroup, 2, 0
+        )  # tpmsGridGroupは既存コードで作成済みとする
 
         # 比率調整
-        mainLayout.setRowStretch(0, 1) # OPS
-        mainLayout.setRowStretch(1, 2) # Lap info
-        mainLayout.setRowStretch(2, 7) # TPMS
+        mainLayout.setRowStretch(0, 1)  # OPS
+        mainLayout.setRowStretch(1, 2)  # Lap info
+        mainLayout.setRowStretch(2, 7)  # TPMS
 
         self.rightGroupBox.setLayout(mainLayout)
 
@@ -330,5 +331,3 @@ class MainWindow(QDialog):
     #     layout.setSpacing(0)
 
     #     self.bottomGroupBox.setLayout(layout)
-
-    

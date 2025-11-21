@@ -1,5 +1,7 @@
 from abc import ABC, abstractmethod
+
 from src.models.models import DashMachineInfo
+
 
 class TelemetrySender(ABC):
     """

@@ -1,24 +1,23 @@
 import logging
-import os
 import subprocess
 
 import can
-
 from src.can.can_listeners import DashInfoListener, UdpPayloadListener
 from src.can.mock_can_sender import MockCanSender
-from src.fuel.fuel_calculator import FuelCalculator # fuel_calculator を受け取るために必要
-from src.util import config # config.py から設定を読み込むために必要
+from src.fuel.fuel_calculator import (
+    FuelCalculator,  # fuel_calculator を受け取るために必要
+)
+from src.util import config  # config.py から設定を読み込むために必要
 
 
 class CanMaster:
     bus: can.BusABC
     dashInfoListener: DashInfoListener
     udpPayloadListener: UdpPayloadListener
-    notifier: can.Notifier # notifier も型ヒントに追加
+    notifier: can.Notifier  # notifier も型ヒントに追加
 
     # __init__ が fuel_calculator を受け取るように修正
     def __init__(self, fuel_calculator: FuelCalculator) -> None:
-        
         # 1. CANバス（bus）のセットアップ
         # config.debug は config.py からインポートした debug 変数を参照
         if config.debug:
@@ -54,6 +53,7 @@ class CanMaster:
         self.notifier = can.Notifier(
             self.bus, [self.dashInfoListener, self.udpPayloadListener]
         )
+
     def __del__(self) -> None:
         # notifier と bus が確実に存在する場合のみ終了処理を行う
         if hasattr(self, "notifier"):

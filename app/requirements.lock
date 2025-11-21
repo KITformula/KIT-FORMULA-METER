@@ -10,50 +10,23 @@
 #   universal: false
 
 -e file:.
-certifi==2024.2.2
-    # via influxdb-client
-    # via requests
-charset-normalizer==3.3.2
-    # via requests
-idna==3.7
-    # via requests
-influxdb-client==1.49.0
-    # via kart-machine-manager
-packaging==24.0
+packaging==25.0
     # via python-can
 paho-mqtt==2.1.0
     # via kart-machine-manager
-pyqt5==5.15.10
+pyqt5==5.15.11
     # via kart-machine-manager
 pyqt5-qt5==5.15.2
     # via pyqt5
-pyqt5-sip==12.13.0
+pyqt5-sip==12.17.1
     # via pyqt5
 pyserial==3.5
     # via kart-machine-manager
-python-can==4.3.1
+python-can==4.6.1
     # via kart-machine-manager
-python-dateutil==2.9.0.post0
-    # via influxdb-client
-python-dotenv==1.1.1
+python-dotenv==1.2.1
     # via kart-machine-manager
-pywin32==311
+typing-extensions==4.15.0
     # via python-can
-reactivex==4.1.0
-    # via influxdb-client
-requests==2.31.0
-    # via kart-machine-manager
-setuptools==80.9.0
-    # via influxdb-client
-six==1.17.0
-    # via python-dateutil
-typing-extensions==4.11.0
-    # via python-can
-    # via reactivex
-urllib3==2.2.1
-    # via influxdb-client
-    # via requests
-websockets==15.0.1
-    # via kart-machine-manager
-wrapt==1.16.0
+wrapt==1.17.3
     # via python-can

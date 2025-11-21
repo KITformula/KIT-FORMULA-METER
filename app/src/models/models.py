@@ -30,8 +30,9 @@ class Rpm(int):
 class WaterTempStatus(IntEnum):
     LOW = 0
     MIDDLE = 1
-    WARNING = 2 
-    HIGH = 3    
+    WARNING = 2
+    HIGH = 3
+
 
 class WaterTemp(int):
     LOW_THRESHOLD = 60
@@ -188,19 +189,20 @@ class BrakePress:
             front = max(0.0, self.front)
             rear = max(0.0, self.rear)
             return round(100.0 * front / (front + rear), 1)
-        
+
 
 class DashMachineInfo:
     """
     車両の全情報を保持するデータクラス
     """
+
     lapCount: int
     currentLapTime: float  # リアルタイムの経過時間または確定したラップタイム
-    lapTimeDiff: float     # 前周との差 (Δタイム)
-    gpsQuality: int        # GPS品質
+    lapTimeDiff: float  # 前周との差 (Δタイム)
+    gpsQuality: int  # GPS品質
 
     rpm: Rpm
-    speed: float           # ★追加: 速度フィールドを明示的に追加
+    speed: float  # ★追加: 速度フィールドを明示的に追加
     throttlePosition: float
     waterTemp: WaterTemp
     oilTemp: OilTemp
@@ -212,7 +214,7 @@ class DashMachineInfo:
     brakePress: BrakePress
 
     fuelEffectivePulseWidth: float
-    delta_t: float # 前回のパケットからの経過時間
+    delta_t: float  # 前回のパケットからの経過時間
 
     def __init__(self) -> None:
         self.rpm = Rpm(0)
@@ -233,7 +235,7 @@ class DashMachineInfo:
         self.lapTimeDiff = 0.0
         self.gpsQuality = 0
         # 前回のラップタイム記録用（必要であれば）
-        self.lastLapTime = 0.0 
+        self.lastLapTime = 0.0
 
     def setRpm(self, rpm: int):
         self.rpm = Rpm(rpm)
@@ -252,22 +254,20 @@ class DashMachineInfo:
             "rpm": int(self.rpm),
             "spd": round(float(self.speed), 1),
             "gr": gear_str,
-            
             # エンジン・センサー (小数点1桁に丸めて軽量化)
             "wt": round(float(self.waterTemp), 1),
             "ot": round(float(self.oilTemp), 1),
             "tp": round(float(self.throttlePosition), 1),
-            "op": round(float(self.oilPress.oilPress), 2), # 油圧はクラス内の属性を参照
-            "v":  round(float(self.batteryVoltage), 1),
-            
+            "op": round(float(self.oilPress.oilPress), 2),  # 油圧はクラス内の属性を参照
+            "v": round(float(self.batteryVoltage), 1),
             # ラップタイム関連
-            "lc":  int(self.lapCount),
+            "lc": int(self.lapCount),
             "clt": round(float(self.currentLapTime), 2),
             "ltd": round(float(self.lapTimeDiff), 2),
-            
             # その他（必要なら追加）
             "fp": round(float(self.fuelPress), 1),
         }
+
 
 class Message:
     text: str

@@ -1,22 +1,23 @@
-import sys
-import time
-import threading
-import random
 import logging
-from PyQt5.QtWidgets import QApplication
-from PyQt5.QtCore import QTimer, pyqtSlot, QObject
+import random
+import sys
+import threading
+import time
 
-from src.machine.machine import Machine
-from src.gui.gui import MainWindow, WindowListener
+from PyQt5.QtCore import QObject, QTimer, pyqtSlot
+from PyQt5.QtWidgets import QApplication
+
 from src.fuel.fuel_calculator import FuelCalculator
+from src.gui.gui import MainWindow, WindowListener
 from src.gui.splash_screen import SplashScreen
-from src.util import config
-from src.util.fuel_store import FuelStore
-from src.tpms.tpms_worker import TpmsWorker
+from src.machine.machine import Machine
 
 # ★修正点1: MQTT Senderとインターフェースをインポート (InfluxDB等は削除)
 from src.telemetry.mqtt_sender import MqttTelemetrySender
 from src.telemetry.sender_interface import TelemetrySender
+from src.tpms.tpms_worker import TpmsWorker
+from src.util import config
+from src.util.fuel_store import FuelStore
 
 # ロガー取得
 logger = logging.getLogger(__name__)
@@ -26,12 +27,14 @@ if not config.debug:
     from src.gps.gps_worker import GpsWorker, calculate_distance_meters
 else:
     # デバッグモード時は、型ヒントのためだけにダミーのクラスを定義
-    class GpsWorker: pass
-    def calculate_distance_meters(a,b,c,d): return 0
+    class GpsWorker:
+        pass
+
+    def calculate_distance_meters(a, b, c, d):
+        return 0
 
 
 class Application(QObject, WindowListener):
-
     def __init__(self):
         super().__init__()
 
@@ -44,7 +47,7 @@ class Application(QObject, WindowListener):
             injector_flow_rate_cc_per_min=config.INJECTOR_FLOW_RATE_CC_PER_MIN,
             num_cylinders=config.NUM_CYLINDERS,
             tank_capacity_ml=tank_capacity_ml,
-            current_remaining_ml=current_start_ml
+            current_remaining_ml=current_start_ml,
         )
         self.machine = Machine(self.fuel_calculator)
 
@@ -63,7 +66,7 @@ class Application(QObject, WindowListener):
         # --- 3. GPS Worker (本番 or モック) ---
         self.gps_worker: GpsWorker | None = None
         self.gps_thread: threading.Thread | None = None
-        
+
         # 状態保持用
         self.lap_count = 0
         self.previous_lap_time = 0.0
@@ -71,12 +74,12 @@ class Application(QObject, WindowListener):
         self.last_lap_time = time.monotonic()
         self.is_outside_lap_zone = True
         self.current_gps_data = {}
-        
+
         if config.debug:
             print("★ GPSワーカーはモックモードで起動します ★")
-            self.mock_lap_time_elapsed = 0.0 
-            self.mock_lap_duration = 10.0 
-            self.mock_best_lap = 60.0 
+            self.mock_lap_time_elapsed = 0.0
+            self.mock_lap_duration = 10.0
+            self.mock_best_lap = 60.0
         else:
             print("★ GPSワーカーは本番モードで起動します ★")
             self.gps_port = getattr(config, "GPS_PORT", "COM6")
@@ -98,10 +101,10 @@ class Application(QObject, WindowListener):
         image_path = "src/gui/icons/kitformula2.png"
 
         self.splash = SplashScreen(image_path, screen_size)
-        
+
         # --- シグナル接続 ---
         self.tpms_worker.data_updated.connect(self.on_tpms_update)
-        
+
         if not config.debug and self.gps_worker:
             self.gps_worker.data_received.connect(self.on_gps_update)
             self.gps_worker.error_occurred.connect(
@@ -122,30 +125,30 @@ class Application(QObject, WindowListener):
         """アプリケーション終了時の後始末を一括で行う"""
         logger.info("Application shutting down...")
         self.save_fuel_state()
-        
+
         # 各ワーカーと送信機を安全に停止
         if self.tpms_worker:
             self.tpms_worker.stop()
-        
+
         if self.telemetry_sender:
-            self.telemetry_sender.stop() # MQTT切断処理 (Clean Session=Trueならここでセッション削除)
-            
+            self.telemetry_sender.stop()  # MQTT切断処理 (Clean Session=Trueならここでセッション削除)
+
         if not config.debug and self.gps_worker:
             self.gps_worker.stop()
 
     def perform_initialization(self):
         """(スロット) 実際の初期化処理"""
         self.machine.initialise()
-        
+
         # ★ 送信開始
         self.telemetry_sender.start()
-        
+
         self.window = MainWindow(self)
         self.window.requestSetStartLine.connect(self.set_start_line)
 
         self.fuel_save_timer.timeout.connect(self.save_fuel_state)
         self.fuel_save_timer.start(config.FUEL_SAVE_INTERVAL_MS)
-        
+
         self.tpms_worker.start()
 
         if not config.debug and self.gps_worker:
@@ -160,10 +163,11 @@ class Application(QObject, WindowListener):
 
     @pyqtSlot(dict)
     def on_gps_update(self, data: dict):
-        if config.debug: return
+        if config.debug:
+            return
         self.current_gps_data = data
-        if hasattr(self.machine.canMaster.dashMachineInfo, 'gpsQuality'):
-             self.machine.canMaster.dashMachineInfo.gpsQuality = data.get('quality', 0)
+        if hasattr(self.machine.canMaster.dashMachineInfo, "gpsQuality"):
+            self.machine.canMaster.dashMachineInfo.gpsQuality = data.get("quality", 0)
         self.check_lap_crossing(data)
 
     def show_main_window(self):
@@ -177,7 +181,7 @@ class Application(QObject, WindowListener):
     def onUpdate(self) -> None:
         """GUIタイマーによって定期的に呼び出される (50ms周期)"""
         self.update_count += 1
-        
+
         dash_info = self.machine.canMaster.dashMachineInfo
         fuel_percentage = self.fuel_calculator.remaining_fuel_percent
 
@@ -185,7 +189,7 @@ class Application(QObject, WindowListener):
         if config.debug:
             self.update_mock_gps_lap(dash_info)
         else:
-            if hasattr(dash_info, 'currentLapTime') and self.last_lap_time:
+            if hasattr(dash_info, "currentLapTime") and self.last_lap_time:
                 current_lap_duration = time.monotonic() - self.last_lap_time
                 dash_info.currentLapTime = current_lap_duration
 
@@ -193,15 +197,15 @@ class Application(QObject, WindowListener):
         # GUI更新周期(50ms)に合わせてデータを送信します。
         # mqtt_sender.py の send() メソッド内の time.sleep() は削除されている前提です。
         # これにより、GUIスレッドをブロックすることなくスムーズに送信できます。
-        
+
         # デバッグログ: 頻繁に出すぎないよう間引いて表示 (2秒に1回程度)
-        if self.update_count % 40 == 0: 
-              logger.debug(f"onUpdate calling send(): RPM={dash_info.rpm}")
+        if self.update_count % 40 == 0:
+            logger.debug(f"onUpdate calling send(): RPM={dash_info.rpm}")
 
         self.telemetry_sender.send(
             info=dash_info,
             fuel_percent=fuel_percentage,
-            tpms_data=self.latest_tpms_data
+            tpms_data=self.latest_tpms_data,
         )
 
         # GUI更新
@@ -226,12 +230,12 @@ class Application(QObject, WindowListener):
             self.lap_count += 1
             dash_info.lapCount = self.lap_count
             lap_time = self.mock_lap_duration + random.uniform(-2.0, 2.0)
-            
+
             if self.lap_count > 1:
                 delta = lap_time - self.previous_lap_time
             else:
                 delta = 0.0
-            
+
             dash_info.lapTimeDiff = delta
             dash_info.currentLapTime = lap_time
             self.previous_lap_time = lap_time
@@ -241,21 +245,24 @@ class Application(QObject, WindowListener):
 
     # --- 本番用ラップタイム計測 ---
     def check_lap_crossing(self, current_data: dict):
-        if self.lap_target_coords is None: return
-        if config.debug: return
+        if self.lap_target_coords is None:
+            return
+        if config.debug:
+            return
 
-        lat = current_data.get('latitude', 0.0)
-        lon = current_data.get('longitude', 0.0)
-        quality = current_data.get('quality', 0)
-        status = current_data.get('status', 'V')
-        
-        is_valid_fix = (quality > 0 or status == 'A') and (lat != 0.0 or lon != 0.0)
-        if not is_valid_fix: return
+        lat = current_data.get("latitude", 0.0)
+        lon = current_data.get("longitude", 0.0)
+        quality = current_data.get("quality", 0)
+        status = current_data.get("status", "V")
+
+        is_valid_fix = (quality > 0 or status == "A") and (lat != 0.0 or lon != 0.0)
+        if not is_valid_fix:
+            return
 
         target_lat, target_lon = self.lap_target_coords
         distance = calculate_distance_meters(target_lat, target_lon, lat, lon)
         current_time = time.monotonic()
-        
+
         lap_radius = getattr(config, "GPS_LAP_RADIUS_METERS", 5.0)
         lap_cooldown = getattr(config, "GPS_LAP_COOLDOWN_SEC", 10.0)
 
@@ -272,7 +279,9 @@ class Application(QObject, WindowListener):
                 info.lapCount = self.lap_count
                 self.last_lap_time = current_time
                 self.is_outside_lap_zone = False
-                print(f"LAP {self.lap_count}: {time_since_last_lap:.2f}s (Diff: {info.lapTimeDiff:+.2f}s)")
+                print(
+                    f"LAP {self.lap_count}: {time_since_last_lap:.2f}s (Diff: {info.lapTimeDiff:+.2f}s)"
+                )
         else:
             self.is_outside_lap_zone = True
 
@@ -290,15 +299,15 @@ class Application(QObject, WindowListener):
                 info.currentLapTime = 0.0
             return
 
-        lat = self.current_gps_data.get('latitude', 0.0)
-        lon = self.current_gps_data.get('longitude', 0.0)
-        
+        lat = self.current_gps_data.get("latitude", 0.0)
+        lon = self.current_gps_data.get("longitude", 0.0)
+
         if lat != 0.0 and lon != 0.0:
             self.lap_target_coords = (lat, lon)
             self.lap_count = 0
             self.last_lap_time = time.monotonic()
             self.previous_lap_time = 0.0
-            
+
             info = self.machine.canMaster.dashMachineInfo
             info.lapCount = 0
             info.lapTimeDiff = 0.0

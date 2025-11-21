@@ -1,13 +1,16 @@
 import threading
 import time
-import can
 import zlib
 from typing import List
+
+import can
+
 
 class MockMachine:
     """
     MoTeC Set 3 プロトコルに基づいて、擬似的な車両データを保持・生成するクラス。
     """
+
     def __init__(self):
         # PDFに記載されている各パラメータを初期化
         self.rpm: int = 0
@@ -31,24 +34,34 @@ class MockMachine:
 
         # 2. ヘッダーとデータ長を設定 (PDF参照)
         packet[0:3] = [0x82, 0x81, 0x80]
-        packet[3] = 84 
+        packet[3] = 84
 
         # 3. 各パラメータをスケール変換し、ビッグエンディアンの2バイトで書き込む (PDF参照)
         try:
-            packet[4:6]   = (self.rpm & 0xFFFF).to_bytes(2, "big")
-            packet[6:8]   = (round(self.throttlePosition * 10) & 0xFFFF).to_bytes(2, "big")
-            packet[8:10]  = (round(self.manifoldPressure * 10) & 0xFFFF).to_bytes(2, "big")
-            packet[12:14] = (round(self.engineTemperature * 10) & 0xFFFF).to_bytes(2, "big")
+            packet[4:6] = (self.rpm & 0xFFFF).to_bytes(2, "big")
+            packet[6:8] = (round(self.throttlePosition * 10) & 0xFFFF).to_bytes(
+                2, "big"
+            )
+            packet[8:10] = (round(self.manifoldPressure * 10) & 0xFFFF).to_bytes(
+                2, "big"
+            )
+            packet[12:14] = (round(self.engineTemperature * 10) & 0xFFFF).to_bytes(
+                2, "big"
+            )
             packet[24:26] = (round(self.fuelPressure * 10) & 0xFFFF).to_bytes(2, "big")
-            packet[26:28] = (round(self.oilTemperature * 10) & 0xFFFF).to_bytes(2, "big")
+            packet[26:28] = (round(self.oilTemperature * 10) & 0xFFFF).to_bytes(
+                2, "big"
+            )
             packet[28:30] = (round(self.oilPressure * 10) & 0xFFFF).to_bytes(2, "big")
             packet[30:32] = (round(self.gearVoltage * 100) & 0xFFFF).to_bytes(2, "big")
-            packet[48:50] = (round(self.batteryVoltage * 100) & 0xFFFF).to_bytes(2, "big")
-            
+            packet[48:50] = (round(self.batteryVoltage * 100) & 0xFFFF).to_bytes(
+                2, "big"
+            )
+
             # 仕様書通り、0.5 µs単位なので、実際の値を0.5で割る (つまり2を掛ける)
             fepw_val = round(self.fuelEffectivePulseWidth * 2)
             packet[112:114] = (fepw_val & 0xFFFF).to_bytes(2, "big")
-            
+
         except Exception as e:
             print(f"Error packing data: {e}")
             return []
@@ -67,12 +80,12 @@ class MockMachine:
             end = start + 8
             data_chunk = packet[start:end]
             msg = can.Message(
-                arbitration_id=0xE8, # 10進数で232
+                arbitration_id=0xE8,  # 10進数で232
                 is_extended_id=False,
-                data=data_chunk
+                data=data_chunk,
             )
             messages.append(msg)
-            
+
         return messages
 
 
@@ -81,6 +94,7 @@ class MockCanSender:
     MockMachineの状態を定期的に更新し、
     MoTeC Set 3 プロトコルに従ったCANメッセージを仮想バスに送信するクラス。
     """
+
     def __init__(self) -> None:
         self.bus = can.Bus(channel="debug", interface="virtual")
         self.machine = MockMachine()
@@ -93,25 +107,25 @@ class MockCanSender:
         # ミリ秒単位の整数時間をベースに計算することで、浮動小数点数の誤差を減らす
         t = int(time.time() * 1000)
         self.machine.rpm = 2500 + (t % 12000)
-        self.machine.throttlePosition = (t % 1001) / 10.0 # 1001にすることで0.0も表現
+        self.machine.throttlePosition = (t % 1001) / 10.0  # 1001にすることで0.0も表現
         self.machine.engineTemperature = 50 + (t % 400) / 10.0
         self.machine.oilTemperature = 90 + (t % 400) / 10.0
         self.machine.oilPressure = 30.0 + (t % 70) / 0.1
         self.machine.gearVoltage = 0.5 + (t % 4501) / 1000.0
         self.machine.batteryVoltage = 9.0 + (t % 500) / 100.0
         self.machine.fuelPressure = 27.0 + (t % 100) / 10.0
-        self.machine.fuelEffectivePulseWidth = 3000+ (t % 9200)
+        self.machine.fuelEffectivePulseWidth = 3000 + (t % 9200)
 
     def sendEvery(self):
         """無限ループで、一定間隔ごとにCANメッセージを送信する。"""
         while True:
             self.updateMachine()
             messages_to_send = self.machine.to_motec_set3_messages()
-            
+
             for msg in messages_to_send:
                 self.bus.send(msg)
-                time.sleep(0.0005) 
-            
+                time.sleep(0.0005)
+
             time.sleep(0.05)
 
     def start(self):
@@ -119,4 +133,3 @@ class MockCanSender:
         t = threading.Thread(target=self.sendEvery)
         t.setDaemon(True)
         t.start()
-

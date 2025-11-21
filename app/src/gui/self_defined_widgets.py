@@ -3,16 +3,17 @@ import datetime
 from PyQt5 import QtCore
 from PyQt5.QtGui import QFont, QPixmap
 from PyQt5.QtWidgets import (
+    QFrame,
     QGridLayout,
     QGroupBox,
     QLabel,
     QProgressBar,
     QSizePolicy,
-    QFrame,
 )
 
 from src.models.models import (
     BatteryVoltage,
+    FuelPress,
     GearType,
     Message,
     # OilPress,
@@ -22,7 +23,6 @@ from src.models.models import (
     Rpm,
     WaterTemp,
     WaterTempStatus,
-    FuelPress,
 )
 
 
@@ -115,12 +115,12 @@ class TitleValueBox(QGroupBox):
         WaterTempオブジェクトを受け取り、'℃'を付けて表示する専用メソッド
         """
         # hasattrで、渡されたオブジェクトが'value'属性を持つか安全にチェック
-        if hasattr(waterTemp, 'value'):
+        if hasattr(waterTemp, "value"):
             display_text = f"{waterTemp.value:.0f} ℃"
         else:
             # もし単なる数値が渡された場合にも対応
             display_text = f"{int(waterTemp):.0f} ℃"
-        
+
         self.valueLabel.setText(display_text)
 
     # --------------- update background warning color  ----------
@@ -192,31 +192,33 @@ class IconValueBox(QGroupBox):
         self.valueLabel.setFontScale(0.75)
         self.valueLabel.setFontFamily("Monospaced Font")
         self.valueLabel.setStyleSheet("QLabel { color : " + self.valueColor + "; }")
-        
+
         # iconPathが指定されている（Noneではない）場合
         if iconPath:
             self.iconLabel = QLabel(self)
             self.iconLabel.setPixmap(QPixmap(iconPath))
             self.iconLabel.setAlignment(QtCore.Qt.AlignCenter)
-            
+
             self.layout.addWidget(self.iconLabel, 0, 0)
-            self.layout.addWidget(self.valueLabel, 0, 1) # valueLabelは既に作成済み
+            self.layout.addWidget(self.valueLabel, 0, 1)  # valueLabelは既に作成済み
             self.layout.setColumnStretch(0, 1)
             self.layout.setColumnStretch(1, 3)
         # iconPathが指定されていない（Noneの）場合
         else:
             # アイコンラベルは作成せず、valueLabelが全幅を使う
-            self.layout.addWidget(self.valueLabel, 0, 0, 1, 2) # valueLabelは既に作成済み
+            self.layout.addWidget(
+                self.valueLabel, 0, 0, 1, 2
+            )  # valueLabelは既に作成済み
 
         self.layout.setContentsMargins(0, 0, 0, 0)
         self.layout.setSpacing(0)
         self.setLayout(self.layout)
-      
+
     def updateBatteryValueLabel(self, batteryVoltage: BatteryVoltage):
         """
         電圧値を受け取り、テキストの表示と色の警告を一度に行う
         """
-       # "BAT " の後ろに半角スペースを入れる
+        # "BAT " の後ろに半角スペースを入れる
         display_text = f" {batteryVoltage:.1f} V"
 
         # --- 2. 色の決定 ---
@@ -224,18 +226,18 @@ class IconValueBox(QGroupBox):
         color_to_set = "#7fff00"  # デフォルトは緑色
 
         if batteryVoltage < 13.0:
-            color_to_set = "#E53E3E"   # 13.0未満は赤
+            color_to_set = "#E53E3E"  # 13.0未満は赤
         elif batteryVoltage <= 13.4:
             color_to_set = "#ECC94B"  # 13.0以上13.1以下は黄
-    
+
         # --- 3. スタイル（色）とテキストを適用 ---
         # 決定した色で、valueLabelの文字色（color）を更新します
         # 注意: フォント設定なども含めて再指定しないと、スタイルがリセットされる可能性があります
         self.valueLabel.setStyleSheet(f"font-weight: bold; color: {color_to_set};")
-        
+
         # 4. テキストを設定
         self.valueLabel.setText(display_text)
-    
+
     def updateFuelPressValueLabel(self, fuelPress: FuelPress):
         """
         FuelPressオブジェクトを受け取り、'kPa'を付けて表示し、
@@ -245,13 +247,13 @@ class IconValueBox(QGroupBox):
         # floatを継承しているので、そのままフォーマットできる
         display_text = f"{fuelPress:.1f} kPa"
         new_color = "#7fff00"
-    
+
         if fuelPress < 28.0:
-            new_color = "#E53E3E" # 28.0未満は赤
+            new_color = "#E53E3E"  # 28.0未満は赤
         else:
-            new_color = "#7fff00" # 28.0以上は緑
+            new_color = "#7fff00"  # 28.0以上は緑
         self.valueLabel.setStyleSheet(f"font-weight: bold; color: {new_color};")
-        
+
         # 4. テキストを設定
         self.valueLabel.setText(display_text)
 
@@ -262,25 +264,24 @@ class IconValueBox(QGroupBox):
         """
         # --- 1. テキストの整形 ---
         display_text = f"{fuel_percentage:.1f} %"
-        
+
         # --- 2. 色の決定 ---
-        new_color = "#7fff00" # デフォルト（緑）
-    
+        new_color = "#7fff00"  # デフォルト（緑）
+
         if fuel_percentage < 20.0:
-            new_color = "#E53E3E" # 20.0%未満は赤
+            new_color = "#E53E3E"  # 20.0%未満は赤
         elif fuel_percentage < 50.0:
-            new_color = "#ECC94B" # 20.0%以上50.0%未満は黄 (バッテリー警告などで使われる黄色)
+            new_color = (
+                "#ECC94B"  # 20.0%以上50.0%未満は黄 (バッテリー警告などで使われる黄色)
+            )
         else:
-            new_color = "#7fff00" # 50.0%以上は緑
-        
+            new_color = "#7fff00"  # 50.0%以上は緑
+
         # --- 3. スタイル（色）とテキストを適用 ---
-        self.valueLabel.setStyleSheet(f"font-weight: bold; color: {new_color}; qproperty-alignment: 'AlignCenter';")
+        self.valueLabel.setStyleSheet(
+            f"font-weight: bold; color: {new_color}; qproperty-alignment: 'AlignCenter';"
+        )
         self.valueLabel.setText(display_text)
-
-
-    
-    
-
 
     def updateMessageLabel(self, message: Message):
         self.valueLabel.setText(message.text)
@@ -372,7 +373,6 @@ class RpmLightBar(QGroupBox):
         self.lightRpm_14 = 11500
         self.lightRpm_15 = 12000
 
-
         self.greenLightColor = "#0F0"
         self.BlueLightColor = "#00ffff"
         self.redLightColor = "#F00"
@@ -410,7 +410,6 @@ class RpmLightBar(QGroupBox):
         self.layout.addWidget(self.light_14, 0, 13)
         self.layout.addWidget(self.light_15, 0, 14)
 
-
         # self.layout.setContentsMargins(0, 0, 0, 0)
         # self.layout.setSpacing(0)
 
@@ -432,6 +431,7 @@ class RpmLightBar(QGroupBox):
         self.light_13.updateRpmLightColor(rpm)
         self.light_14.updateRpmLightColor(rpm)
         self.light_15.updateRpmLightColor(rpm)
+
 
 class RpmLight(QGroupBox):
     def __init__(self, onRpm, onColor):
@@ -496,8 +496,7 @@ class LapTimerLabel(QCustomLabel):
         self.setStyleSheet("color : #ffffff; background-color: #000")
 
     def updateLapTimerLabel(self, message: Message):
-
-        self.setText(str(round(message.laptime, 1))+"0.00")
+        self.setText(str(round(message.laptime, 1)) + "0.00")
 
 
 class TpmsBox(QGroupBox):
@@ -505,20 +504,25 @@ class TpmsBox(QGroupBox):
     一つのタイヤのTPMS（気温・気圧）を表示する
     カスタムウィジェット（1マス分）
     """
+
     def __init__(self, title: str):
         super(TpmsBox, self).__init__(title)
-        
+
         # --- スタイル定義 ---
         # ★ 1. フォントファミリーに "Monospace" を指定
         # ★ 2. フォントサイズをさらに大きく調整 (例: 40px, 32px)
-        self.temp_style_base = "font-family: 'Monospace'; font-size: 100px; font-weight: bold;"
-        self.pressure_style_base = "font-family: 'Monospace'; font-size: 40px; font-weight: bold;"
-        
+        self.temp_style_base = (
+            "font-family: 'Monospace'; font-size: 100px; font-weight: bold;"
+        )
+        self.pressure_style_base = (
+            "font-family: 'Monospace'; font-size: 40px; font-weight: bold;"
+        )
+
         self.color_ok = "color: #FFF;"
         self.color_no_data = "color: #888;"
 
         # --- ウィジェットの作成 ---
-        
+
         # 1. 気温表示用のラベル
         self.tempLabel = QLabel("---")
         self.tempLabel.setAlignment(QtCore.Qt.AlignCenter)
@@ -527,28 +531,30 @@ class TpmsBox(QGroupBox):
         # 2. 気圧表示用のラベル
         self.pressureLabel = QLabel("---")
         self.pressureLabel.setAlignment(QtCore.Qt.AlignCenter)
-        self.pressureLabel.setStyleSheet(f"{self.pressure_style_base} {self.color_no_data}")
+        self.pressureLabel.setStyleSheet(
+            f"{self.pressure_style_base} {self.color_no_data}"
+        )
 
         # 3. 真ん中の横線
         self.line = QFrame()
-        self.line.setFrameShape(QFrame.HLine) # 水平線
+        self.line.setFrameShape(QFrame.HLine)  # 水平線
         self.line.setFrameShadow(QFrame.Sunken)
         self.line.setStyleSheet("background-color: #555;")
 
         # --- レイアウトの構築 ---
         layout = QGridLayout()
-        layout.setContentsMargins(5, 5, 5, 5) # 内側の余白
-        layout.setSpacing(0) # ウィジェット間の隙間をゼロに
+        layout.setContentsMargins(5, 5, 5, 5)  # 内側の余白
+        layout.setSpacing(0)  # ウィジェット間の隙間をゼロに
 
-        layout.addWidget(self.tempLabel, 0, 0)     # 1段目: 気温
-        layout.addWidget(self.line, 1, 0)          # 2段目: 横線
-        layout.addWidget(self.pressureLabel, 2, 0) # 3段目: 気圧
+        layout.addWidget(self.tempLabel, 0, 0)  # 1段目: 気温
+        layout.addWidget(self.line, 1, 0)  # 2段目: 横線
+        layout.addWidget(self.pressureLabel, 2, 0)  # 3段目: 気圧
 
         # ★ 3. 縦の比率を「温度 3 : 線 0 : 気圧 1」に（変更なし）
-        layout.setRowStretch(0, 3) # 温度
-        layout.setRowStretch(1, 0) # 線 (最小)
-        layout.setRowStretch(2, 1) # 気圧
-        
+        layout.setRowStretch(0, 3)  # 温度
+        layout.setRowStretch(1, 0)  # 線 (最小)
+        layout.setRowStretch(2, 1)  # 気圧
+
         self.setLayout(layout)
 
     def updateTemperature(self, temp_c: float | None):
@@ -565,8 +571,12 @@ class TpmsBox(QGroupBox):
         """気圧ラベルを更新する"""
         if pressure_kpa is None:
             self.pressureLabel.setText("---")
-            self.pressureLabel.setStyleSheet(f"{self.pressure_style_base} {self.color_no_data}")
+            self.pressureLabel.setStyleSheet(
+                f"{self.pressure_style_base} {self.color_no_data}"
+            )
         else:
             self.pressureLabel.setText(f"{pressure_kpa:.0f} kPa")
             # (閾値に応じて色を変えるロジックもここに追加できる)
-            self.pressureLabel.setStyleSheet(f"{self.pressure_style_base} {self.color_ok}")
+            self.pressureLabel.setStyleSheet(
+                f"{self.pressure_style_base} {self.color_ok}"
+            )

@@ -7,10 +7,7 @@ dependencies = [
     "python-can>=4.3.1",
     "pyqt5>=5.15.10",
     "python-dotenv>=1.1.1",
-    "requests>=2.31.0",
     "pyserial>=3.5",
-    "influxdb-client>=1.49.0",
-    "websockets>=13.0",
     "paho-mqtt>=2.1.0",
 ]
 requires-python = ">= 3.11"
