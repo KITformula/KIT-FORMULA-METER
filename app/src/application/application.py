@@ -8,7 +8,8 @@ from PyQt5.QtCore import QObject, QTimer, pyqtSlot
 from PyQt5.QtWidgets import QApplication
 
 from src.fuel.fuel_calculator import FuelCalculator
-from src.gui.gui import MainWindow, WindowListener
+# --- 変更: MainWindow ではなく MainDisplayWindow をインポート ---
+from src.gui.gui import MainDisplayWindow, WindowListener
 from src.gui.splash_screen import SplashScreen
 from src.machine.machine import Machine
 
@@ -18,6 +19,9 @@ from src.telemetry.sender_interface import TelemetrySender
 from src.tpms.tpms_worker import TpmsWorker
 from src.util import config
 from src.util.fuel_store import FuelStore
+
+# --- 追加: エンコーダ用ワーカーのインポート ---
+from src.hardware.encoder_worker import EncoderWorker
 
 # ロガー取得
 logger = logging.getLogger(__name__)
@@ -32,6 +36,12 @@ else:
 
     def calculate_distance_meters(a, b, c, d):
         return 0
+    
+class AppWindowListener(WindowListener):
+    def __init__(self, app_instance):
+        self.app = app_instance
+    def onUpdate(self):
+        self.app.update()
 
 
 class Application(QObject, WindowListener):
@@ -91,11 +101,15 @@ class Application(QObject, WindowListener):
         # --- 4. Qtオブジェクト ---
         self.app: QApplication = None
         self.splash: SplashScreen = None
-        self.window: MainWindow = None
+        # --- 変更: 型ヒントを MainDisplayWindow に変更 ---
+        self.window: MainDisplayWindow = None
         self.fuel_save_timer = QTimer()
 
         # ログ間引き用のカウンタ
         self.update_count = 0
+        
+        # --- 追加: エンコーダインスタンス ---
+        self.encoder_worker = None
 
     def initialize(self) -> None:
         self.app = QApplication(sys.argv)
@@ -140,8 +154,10 @@ class Application(QObject, WindowListener):
 
         if not config.debug and self.gps_worker:
             self.gps_worker.stop()
-
-    
+            
+        # --- 追加: エンコーダ停止 ---
+        if self.encoder_worker:
+            self.encoder_worker.stop()
 
     def perform_initialization(self):
         """(スロット) 実際の初期化処理"""
@@ -150,8 +166,19 @@ class Application(QObject, WindowListener):
         # ★ 送信開始
         self.telemetry_sender.start()
 
-        self.window = MainWindow(self)
+        # --- 変更: MainDisplayWindow を生成 ---
+        self.window = MainDisplayWindow(self)
         self.window.requestSetStartLine.connect(self.set_start_line)
+        
+        # --- 追加: エンコーダの初期化と接続 ---
+        # ピン番号は必要に応じて調整してください (例: A=27, B=17)
+        self.encoder_worker = EncoderWorker(pin_a=27, pin_b=17)
+        
+        # 時計回りに回した時に画面を切り替える
+        self.encoder_worker.rotated_cw.connect(self.window.switch_screen)
+        # 必要なら反時計回りも接続
+        # self.encoder_worker.rotated_ccw.connect(self.window.switch_screen)
+        # ----------------------------------
 
         self.fuel_save_timer.timeout.connect(self.save_fuel_state)
         self.fuel_save_timer.start(config.FUEL_SAVE_INTERVAL_MS)

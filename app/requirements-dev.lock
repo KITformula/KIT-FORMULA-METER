@@ -10,8 +10,14 @@
 #   universal: false
 
 -e file:.
+bleak==1.1.1
+    # via kart-machine-manager
 colorama==0.4.6
     # via pytest
+colorzero==2.0
+    # via gpiozero
+gpiozero==2.0.1
+    # via kart-machine-manager
 iniconfig==2.3.0
     # via pytest
 mypy==1.18.2
@@ -42,8 +48,35 @@ python-can==4.6.1
 python-dotenv==1.2.1
     # via kart-machine-manager
 ruff==0.14.6
+setuptools==80.9.0
+    # via colorzero
 typing-extensions==4.15.0
+    # via bleak
     # via mypy
     # via python-can
+    # via winrt-runtime
+winrt-runtime==3.2.1
+    # via bleak
+    # via winrt-windows-devices-bluetooth
+    # via winrt-windows-devices-bluetooth-advertisement
+    # via winrt-windows-devices-bluetooth-genericattributeprofile
+    # via winrt-windows-devices-enumeration
+    # via winrt-windows-foundation
+    # via winrt-windows-foundation-collections
+    # via winrt-windows-storage-streams
+winrt-windows-devices-bluetooth==3.2.1
+    # via bleak
+winrt-windows-devices-bluetooth-advertisement==3.2.1
+    # via bleak
+winrt-windows-devices-bluetooth-genericattributeprofile==3.2.1
+    # via bleak
+winrt-windows-devices-enumeration==3.2.1
+    # via bleak
+winrt-windows-foundation==3.2.1
+    # via bleak
+winrt-windows-foundation-collections==3.2.1
+    # via bleak
+winrt-windows-storage-streams==3.2.1
+    # via bleak
 wrapt==1.17.3
     # via python-can

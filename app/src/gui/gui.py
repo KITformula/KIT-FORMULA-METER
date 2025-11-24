@@ -9,6 +9,10 @@ from PyQt5.QtWidgets import (
     QDialog,
     QGridLayout,
     QGroupBox,
+    QWidget,        # 追加
+    QStackedWidget, # 追加
+    QLabel,         # 追加
+    QVBoxLayout,    # 追加
 )
 
 from src.gui.self_defined_widgets import (
@@ -33,16 +37,19 @@ class WindowListener:  # (metaclass=ABCMeta):
         pass
 
 
-class MainWindow(QDialog):
+# --- 変更: 元の MainWindow を DashboardWidget に変更し、継承を QWidget に ---
+class DashboardWidget(QWidget):
     requestSetStartLine = pyqtSignal()
 
     def __init__(self, listener: WindowListener):
-        super(MainWindow, self).__init__(None)
+        super(DashboardWidget, self).__init__(None)
 
-        self.resize(800, 480)
+        # self.resize(800, 480) # サイズ指定は親ウィンドウに任せるためコメントアウトでもOK
 
         self.listener = listener
 
+        # タイマーは親ウィンドウに移しても良いですが、
+        # 既存ロジックへの影響を最小限にするためここに残します。
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.listener.onUpdate)
         self.timer.start(50)
@@ -331,3 +338,98 @@ class MainWindow(QDialog):
     #     layout.setSpacing(0)
 
     #     self.bottomGroupBox.setLayout(layout)
+
+
+# --- 追加: 2ページ目の簡易画面 ---
+class InfoScreen(QWidget):
+    def __init__(self):
+        super().__init__()
+        layout = QVBoxLayout()
+        
+        label = QLabel("SYSTEM SETTINGS")
+        label.setAlignment(Qt.AlignCenter)
+        label.setStyleSheet("font-size: 48px; font-weight: bold; color: #FFFF00;") # 黄色文字
+        
+        desc = QLabel("Turn Encoder to Return")
+        desc.setAlignment(Qt.AlignCenter)
+        desc.setStyleSheet("font-size: 24px; color: #AAAAAA;")
+
+        layout.addStretch()
+        layout.addWidget(label)
+        layout.addWidget(desc)
+        layout.addStretch()
+        
+        self.setLayout(layout)
+        
+        # 背景色設定
+        palette = self.palette()
+        palette.setColor(self.backgroundRole(), QColor("#222")) # 少し明るい黒
+        self.setPalette(palette)
+        self.setAutoFillBackground(True)
+
+
+# --- 追加: これらをまとめる親ウィンドウ (旧 MainWindow の役割) ---
+class MainDisplayWindow(QDialog):
+    # 外部に公開するシグナル（子widgetからのリレー用）
+    requestSetStartLine = pyqtSignal()
+
+    def __init__(self, listener: WindowListener):
+        super(MainDisplayWindow, self).__init__(None)
+        self.resize(800, 480)
+        
+        # 全体設定
+        palette = QApplication.palette()
+        palette.setColor(self.backgroundRole(), QColor("#000"))
+        palette.setColor(self.foregroundRole(), QColor("#FFF"))
+        self.setPalette(palette)
+
+        self.listener = listener
+        
+        # レイアウト作成
+        layout = QGridLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        
+        # ★ QStackedWidget: 複数のページを重ねて、1つだけ表示するウィジェット
+        self.stack = QStackedWidget()
+        
+        # ページ1: ダッシュボード (index 0)
+        self.dashboard = DashboardWidget(listener)
+        # シグナルリレー: ダッシュボードの要求をこのウィンドウのシグナルとして再発火
+        self.dashboard.requestSetStartLine.connect(self.requestSetStartLine.emit)
+        
+        # ページ2: 情報画面 (index 1)
+        self.info_screen = InfoScreen()
+        
+        # スタックに追加
+        self.stack.addWidget(self.dashboard)
+        self.stack.addWidget(self.info_screen)
+        
+        layout.addWidget(self.stack)
+        self.setLayout(layout)
+
+    # --- 外部から呼ばれる更新メソッド ---
+    def updateDashboard(self, dashMachineInfo, fuel_percentage, tpms_data):
+        # 現在表示されているページがダッシュボードなら更新
+        # (裏でも更新したい場合は if を外す)
+        if self.stack.currentIndex() == 0:
+            self.dashboard.updateDashboard(dashMachineInfo, fuel_percentage, tpms_data)
+
+    # --- 画面切り替えスロット ---
+    def switch_screen(self):
+        """現在のページを切り替える"""
+        current = self.stack.currentIndex()
+        count = self.stack.count()
+        # 次のページへ (ループする)
+        next_index = (current + 1) % count
+        self.stack.setCurrentIndex(next_index)
+        
+        print(f"Screen switched to index: {next_index}")
+
+    # キーイベントを子に渡す、またはここで処理する
+    def keyPressEvent(self, event):
+        # 現在表示中のウィジェットにイベントを流す
+        current_widget = self.stack.currentWidget()
+        if current_widget:
+            current_widget.keyPressEvent(event)
+        else:
+            super().keyPressEvent(event)

@@ -1,6 +1,6 @@
 import datetime
 import math
-
+import subprocess  # ★追加: システムコマンド実行用
 import serial
 from PyQt5.QtCore import QObject, pyqtSignal
 
@@ -116,6 +116,9 @@ class GpsWorker(QObject):
         self.total_distance_km = 0.0
         self.last_valid_latitude = 0.0
         self.last_valid_longitude = 0.0
+        
+        # ★追加: 時刻同期が完了したかどうかのフラグ
+        self.is_time_synced = False
 
         # データを一時保存する
         self.last_known_data = {
@@ -279,15 +282,19 @@ class GpsWorker(QObject):
 
                     return True  # データ更新
 
-            # $GNRMC,時刻,ステータス,緯度,N/S,経度,E/W,速度(knot),...
+            # $GNRMC,時刻,ステータス,緯度,N/S,経度,E/W,速度(knot),方位,日付,...
             elif sentence_type.endswith("RMC"):
-                if len(parts) > 6:
+                # RMCの日付情報は index 9 にあるため、少なくとも10要素必要
+                if len(parts) > 9:
                     time_str = parts[1]
                     status_str = parts[2]  # 'A' or 'V'
                     lat_str = parts[3]
                     lat_dir = parts[4]
                     lon_str = parts[5]
                     lon_dir = parts[6]
+                    # speed_knots = parts[7]
+                    # track_angle = parts[8]
+                    date_str = parts[9]    # DDMMYY
 
                     self.last_known_data["time"] = parse_nmea_time(time_str)
                     self.last_known_data["status"] = status_str
@@ -304,6 +311,11 @@ class GpsWorker(QObject):
                         self.last_known_data["quality"] = 1  # RMCが有効なら、最低品質1
                     elif status_str == "V":
                         self.last_known_data["quality"] = 0
+                    
+                    # ★追加: GPS時刻でシステム時計を合わせる (起動後1回だけ)
+                    # ステータスがActive('A')で、まだ同期しておらず、時刻と日付が取得できている場合
+                    if status_str == 'A' and not self.is_time_synced and time_str and date_str:
+                        self._sync_system_time(date_str, time_str)
 
                     return True  # データ更新
 
@@ -321,3 +333,40 @@ class GpsWorker(QObject):
             pass
 
         return False  # データ更新なし
+
+    def _sync_system_time(self, date_str, time_str):
+        """
+        GPSの DDMMYY と HHMMSS.sss を使ってラズパイの時刻を設定する
+        """
+        try:
+            # 日付: DDMMYY -> 20YY-MM-DD
+            if len(date_str) == 6:
+                day = date_str[0:2]
+                month = date_str[2:4]
+                year = "20" + date_str[4:6]
+            else:
+                return
+
+            # 時刻: HHMMSS.sss -> HH:MM:SS
+            # .sss (小数点以下) があってもなくても対応できるように先頭6文字だけ使う
+            if len(time_str) >= 6:
+                hour = time_str[0:2]
+                minute = time_str[2:4]
+                second = time_str[4:6]
+            else:
+                return
+            
+            # dateコマンド用の文字列を作成 (YYYY-MM-DD HH:MM:SS)
+            date_cmd_str = f"{year}-{month}-{day} {hour}:{minute}:{second}"
+            
+            print(f"GPS Time Sync: Setting system time to {date_cmd_str} UTC...")
+            
+            # ラズパイの時刻を設定 (UTCとして設定)
+            # ※sudo権限が必要ですが、通常piユーザーはパスワードなしでsudodateできることが多いです
+            subprocess.run(["sudo", "date", "-u", "-s", date_cmd_str], check=True)
+            
+            self.is_time_synced = True
+            print("GPS Time Sync: Success!")
+            
+        except Exception as e:
+            print(f"GPS Time Sync Failed: {e}")
