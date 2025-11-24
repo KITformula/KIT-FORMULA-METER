@@ -37,6 +37,8 @@ class GoProWorker(QObject):
 
     def stop(self):
         self._keep_running = False
+        if self.loop:
+            self.loop.call_soon_threadsafe(self._command_queue.put_nowait, None)
 
     def send_command_record_start(self):
         if self.loop:
@@ -53,69 +55,62 @@ class GoProWorker(QObject):
             self.loop.run_until_complete(self._main_task())
         except Exception as e:
             logger.error(f"GoPro Worker Error: {e}")
-            self.status_changed.emit(f"Sys Error: {e}")
+            self.status_changed.emit(f"Error: {e}")
         finally:
-            try:
-                tasks = asyncio.all_tasks(self.loop)
-                for task in tasks:
-                    task.cancel()
-                self.loop.run_until_complete(asyncio.gather(*tasks, return_exceptions=True))
-            except:
-                pass
             self.loop.close()
             self.thread = None
 
     async def _main_task(self):
         while self._keep_running:
-            # 1. ターゲット未定ならスキャン
+            # 1. アドレスがない場合のスキャン
             if not self.target_address:
                 self.status_changed.emit("Scanning...")
                 found_address = await self._scan_for_gopro()
+                
                 if not found_address:
                     self.status_changed.emit("GoPro Not Found")
                     await asyncio.sleep(3.0)
                     continue
+                
                 self.target_address = found_address
                 self.status_changed.emit(f"Found: {self.target_address}")
 
             # 2. 接続試行
             self.status_changed.emit("Connecting...")
             
-            # フラグ: 修復（Unpair）が必要か
-            need_repair = False
+            # ★ 修正点: ここでの強制Unpairを削除しました。
+            # まずは既存のペアリング情報で接続を試みます。
+            
+            need_repair = False # 修復が必要かどうかのフラグ
 
             try:
-                # ★ 接続前に念のため強制切断を試みる（キャッシュ残り対策）
-                # await self._force_disconnect(self.target_address) # ※BlueZのバグを誘発することもあるので一旦コメントアウト
-
-                async with BleakClient(self.target_address, timeout=25.0, disconnected_callback=self._on_disconnect) as client:
+                async with BleakClient(self.target_address, timeout=20.0, disconnected_callback=self._on_disconnect) as client:
                     self.client = client
                     
                     if not client.is_connected:
-                        raise Exception("Connect Failed (Initial)")
+                        raise Exception("Connect Failed")
 
                     self.status_changed.emit("Verifying...")
                     
-                    # ペアリング試行
+                    # ペアリング試行（既にペアリング済みなら即座に完了する）
                     try:
                         await client.pair(protection_level=2)
-                    except Exception as e:
-                        logger.warning(f"Pairing note: {e}")
+                    except:
+                        pass
 
-                    # ★ 接続検証: バッテリーレベル読み取り
-                    # これが成功して初めて「接続成功」とみなす
+                    # 接続検証
+                    await asyncio.sleep(1.0)
                     try:
-                        # 少し待ってから読み取る（接続直後の不安定さを回避）
-                        await asyncio.sleep(1.0)
                         bat_val = await client.read_gatt_char(UUID_BATTERY_LEVEL)
                         bat_percent = int(bat_val[0])
-                        self.status_changed.emit(f"Ready! Bat:{bat_percent}%")
+                        # "Connected"を含めることで緑色表示にする
+                        self.status_changed.emit(f"Connected! Bat:{bat_percent}%")
                         self.connection_success.emit(True)
                     except Exception as e:
                         logger.error(f"Verification Failed: {e}")
                         self.status_changed.emit("Auth Failed")
+                        # 読めない＝認証エラーの可能性が高いので、修復フラグを立てる
                         need_repair = True
-                        # 検証失敗時は例外を投げてwithブロックを抜け、切断処理へ
                         raise e
 
                     # --- コマンドループ ---
@@ -124,18 +119,21 @@ class GoProWorker(QObject):
                             try:
                                 cmd = await asyncio.wait_for(self._command_queue.get(), timeout=5.0)
                                 
+                                if cmd is None:
+                                    break
+
                                 if cmd == "RECORD_START":
-                                    self.status_changed.emit("REC ON...")
+                                    self.status_changed.emit("Sending: REC ON")
                                     await client.write_gatt_char(COMMAND_REQ_UUID, CMD_SHUTTER_ON, response=True)
                                     self.status_changed.emit("Recording!")
                                     
                                 elif cmd == "RECORD_STOP":
-                                    self.status_changed.emit("REC OFF...")
+                                    self.status_changed.emit("Sending: REC OFF")
                                     await client.write_gatt_char(COMMAND_REQ_UUID, CMD_SHUTTER_OFF, response=True)
                                     self.status_changed.emit("Stopped")
                                     
                             except asyncio.TimeoutError:
-                                # ハートビート: 接続確認
+                                # ハートビート
                                 try:
                                     await client.read_gatt_char(UUID_BATTERY_LEVEL)
                                 except:
@@ -148,46 +146,44 @@ class GoProWorker(QObject):
 
             except BleakError as e:
                 logger.error(f"Bleak error: {e}")
-                err_msg = str(e)
                 self.status_changed.emit("Conn Error")
+                err_str = str(e)
                 
-                # 特定のエラー、または「接続できたのに切れた」場合は修復へ
-                if "Authentication" in err_msg or "Not connected" in err_msg or "Software caused connection abort" in err_msg:
+                # 特定のエラーなら修復フラグを立てる
+                if "Authentication" in err_str or "Not connected" in err_str:
                     need_repair = True
                 
-                # ★ Device disconnected が出たら、ターゲットアドレス自体が怪しいので忘れる
-                if "Device disconnected" in err_msg:
-                    need_repair = True
+                # デバイスが見つからない場合はアドレスが変わった可能性があるので忘れる
+                if "not found" in err_str or "Device disconnected" in err_str:
                     self.target_address = None
 
             except Exception as e:
                 logger.error(f"General error: {e}")
                 self.status_changed.emit("Error")
-                need_repair = True
+                # 謎のエラーの場合はとりあえずアドレスを忘れて再スキャンへ
+                self.target_address = None
 
-            # --- 終了処理 ---
+            # --- 切断後の処理 ---
             self.client = None
             self.connection_success.emit(False)
-            self.status_changed.emit("Disconnected")
-
-            # 3. 修復が必要ならUnpairして待機
-            if need_repair and self._keep_running:
-                self.status_changed.emit("Repairing...")
-                # アドレスがあればUnpair
-                if self.target_address:
-                    await self._force_unpair(self.target_address)
-                
-                # ★ 重要: 修復後は必ずアドレスを忘れて再スキャンさせる
-                self.target_address = None 
-                await asyncio.sleep(3.0)
             
-            await asyncio.sleep(1.0)
+            if self._keep_running:
+                # ★ 修復が必要と判断された場合のみ Unpair を行う
+                if need_repair and self.target_address:
+                    self.status_changed.emit("Repairing...")
+                    await self._force_unpair(self.target_address)
+                    self.target_address = None # アドレスも忘れて最初からやり直す
+                    await asyncio.sleep(3.0)
+                else:
+                    # 通常の切断（電源OFFなど）なら、Link Lostとして再接続を待つ
+                    self.status_changed.emit("Link Lost / Retrying...")
+                    await asyncio.sleep(2.0)
 
     async def _scan_for_gopro(self):
         try:
             device = await BleakScanner.find_device_by_filter(
                 lambda d, ad: d.name and "GoPro" in d.name,
-                timeout=10.0 
+                timeout=8.0 
             )
             return device.address if device else None
         except Exception as e:
@@ -195,18 +191,18 @@ class GoProWorker(QObject):
             return None
 
     async def _force_unpair(self, address):
-        """OSのペアリング情報を削除する"""
         try:
-            # 接続せずにクライアントを作ってunpairだけ叩く
             client = BleakClient(address)
-            # Linux(BlueZ)環境でのみ有効
             if hasattr(client, "unpair"):
-                # BlueZバックエンドであることを確認
-                if isinstance(client._backend, BleakClientBlueZDBus):
+                try:
                     await client.unpair()
-                    logger.info(f"Unpaired {address} successfully.")
-        except Exception as e:
-            logger.warning(f"Unpair failed: {e}")
+                    logger.info(f"Unpaired {address}")
+                except:
+                    pass
+        except:
+            pass
 
     def _on_disconnect(self, client):
         self.status_changed.emit("Link Lost")
+        if self.loop:
+            self.loop.call_soon_threadsafe(self._command_queue.put_nowait, None)
