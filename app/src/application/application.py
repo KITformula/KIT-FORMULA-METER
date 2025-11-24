@@ -8,7 +8,6 @@ from PyQt5.QtCore import QObject, QTimer, pyqtSlot
 from PyQt5.QtWidgets import QApplication
 
 from src.fuel.fuel_calculator import FuelCalculator
-# --- 変更: MainWindow ではなく MainDisplayWindow をインポート ---
 from src.gui.gui import MainDisplayWindow, WindowListener
 from src.gui.splash_screen import SplashScreen
 from src.machine.machine import Machine
@@ -20,17 +19,15 @@ from src.tpms.tpms_worker import TpmsWorker
 from src.util import config
 from src.util.fuel_store import FuelStore
 
-# --- 追加: エンコーダ用ワーカーのインポート ---
 from src.hardware.encoder_worker import EncoderWorker
+# ★ 追加
+from src.gopro.gopro_worker import GoProWorker
 
-# ロガー取得
 logger = logging.getLogger(__name__)
 
-# ★ デバッグモードでない場合のみ、GpsWorkerをインポート
 if not config.debug:
     from src.gps.gps_worker import GpsWorker, calculate_distance_meters
 else:
-    # デバッグモード時は、型ヒントのためだけにダミーのクラスを定義
     class GpsWorker:
         pass
 
@@ -50,24 +47,20 @@ class Application(QObject, WindowListener):
 
         # --- 1. 燃料・マシン設定 ---
         self.fuel_store = FuelStore()
-        tank_capacity_ml = config.INITIAL_FUEL_ML
-        current_start_ml = self.fuel_store.load_state() or tank_capacity_ml
+        self.tank_capacity_ml = config.INITIAL_FUEL_ML
+        current_start_ml = self.fuel_store.load_state() or self.tank_capacity_ml
 
         self.fuel_calculator = FuelCalculator(
             injector_flow_rate_cc_per_min=config.INJECTOR_FLOW_RATE_CC_PER_MIN,
             num_cylinders=config.NUM_CYLINDERS,
-            tank_capacity_ml=tank_capacity_ml,
+            tank_capacity_ml=self.tank_capacity_ml,
             current_remaining_ml=current_start_ml,
         )
         self.machine = Machine(self.fuel_calculator)
 
         self.csv_logger = CsvLogger(base_dir="logs")
-
-        # ★修正点2: テレメトリ送信機をMQTT実装に一本化
-        # ここで新しいMqttTelemetrySenderを生成します
         self.telemetry_sender: TelemetrySender = MqttTelemetrySender()
 
-        # --- 2. TPMS Worker ---
         self.tpms_worker = TpmsWorker(
             frequency=config.RTL433_FREQUENCY,
             id_map=config.TPMS_ID_MAP,
@@ -75,11 +68,12 @@ class Application(QObject, WindowListener):
         )
         self.latest_tpms_data = {}
 
-        # --- 3. GPS Worker (本番 or モック) ---
         self.gps_worker: GpsWorker | None = None
         self.gps_thread: threading.Thread | None = None
 
-        # 状態保持用
+        # ★ GoPro Workerの初期化（ここではまだ接続しない）
+        self.gopro_worker = GoProWorker()
+
         self.lap_count = 0
         self.previous_lap_time = 0.0
         self.lap_target_coords = None
@@ -98,17 +92,11 @@ class Application(QObject, WindowListener):
             self.gps_baud = getattr(config, "GPS_BAUD", 115200)
             self.gps_worker = GpsWorker(self.gps_port, self.gps_baud)
 
-        # --- 4. Qtオブジェクト ---
         self.app: QApplication = None
         self.splash: SplashScreen = None
-        # --- 変更: 型ヒントを MainDisplayWindow に変更 ---
         self.window: MainDisplayWindow = None
         self.fuel_save_timer = QTimer()
-
-        # ログ間引き用のカウンタ
         self.update_count = 0
-        
-        # --- 追加: エンコーダインスタンス ---
         self.encoder_worker = None
 
     def initialize(self) -> None:
@@ -118,7 +106,6 @@ class Application(QObject, WindowListener):
 
         self.splash = SplashScreen(image_path, screen_size)
 
-        # --- シグナル接続 ---
         self.tpms_worker.data_updated.connect(self.on_tpms_update)
 
         if not config.debug and self.gps_worker:
@@ -131,18 +118,14 @@ class Application(QObject, WindowListener):
         self.splash.fade_out_finished.connect(self.show_main_window)
         self.splash.start()
 
-        # --- アプリ終了シグナル ---
-        # 終了処理を一箇所にまとめた cleanup メソッドを呼ぶように変更
         self.app.aboutToQuit.connect(self.cleanup)
 
         sys.exit(self.app.exec_())
 
     def cleanup(self):
-        """アプリケーション終了時の後始末を一括で行う"""
         logger.info("Application shutting down...")
         self.save_fuel_state()
 
-        # 各ワーカーと送信機を安全に停止
         if self.csv_logger.is_active:
             self.csv_logger.stop()
 
@@ -150,35 +133,39 @@ class Application(QObject, WindowListener):
             self.tpms_worker.stop()
 
         if self.telemetry_sender:
-            self.telemetry_sender.stop()  # MQTT切断処理 (Clean Session=Trueならここでセッション削除)
+            self.telemetry_sender.stop()
 
         if not config.debug and self.gps_worker:
             self.gps_worker.stop()
             
-        # --- 追加: エンコーダ停止 ---
         if self.encoder_worker:
             self.encoder_worker.stop()
+            
+        # ★ GoPro切断
+        if self.gopro_worker:
+            self.gopro_worker.stop()
 
     def perform_initialization(self):
-        """(スロット) 実際の初期化処理"""
         self.machine.initialise()
-
-        # ★ 送信開始
         self.telemetry_sender.start()
 
-        # --- 変更: MainDisplayWindow を生成 ---
         self.window = MainDisplayWindow(self)
+        
+        # --- シグナル接続 ---
         self.window.requestSetStartLine.connect(self.set_start_line)
+        self.window.requestResetFuel.connect(self.reset_fuel_integrator)
         
-        # --- 追加: エンコーダの初期化と接続 ---
-        # ピン番号は必要に応じて調整してください (例: A=27, B=17)
-        self.encoder_worker = EncoderWorker(pin_a=27, pin_b=17)
+        # ★ GoPro設定: ボタンが押されたら接続開始
+        self.window.requestGoproSetup.connect(self.gopro_worker.start_connection)
+        # ★ GoProステータス: Workerの状態が変わったら画面に表示
+        self.gopro_worker.status_changed.connect(self.window.updateGoProStatus)
         
-        # 時計回りに回した時に画面を切り替える
-        self.encoder_worker.rotated_cw.connect(self.window.switch_screen)
-        # 必要なら反時計回りも接続
-        # self.encoder_worker.rotated_ccw.connect(self.window.switch_screen)
-        # ----------------------------------
+        self.window.requestLapTimeSetup.connect(self.setup_lap_time)
+
+        self.encoder_worker = EncoderWorker(pin_a=27, pin_b=17, pin_sw=22)
+        self.encoder_worker.rotated_cw.connect(self.window.input_cw)
+        self.encoder_worker.rotated_ccw.connect(self.window.input_ccw)
+        self.encoder_worker.button_pressed.connect(self.window.input_enter)
 
         self.fuel_save_timer.timeout.connect(self.save_fuel_state)
         self.fuel_save_timer.start(config.FUEL_SAVE_INTERVAL_MS)
@@ -190,6 +177,58 @@ class Application(QObject, WindowListener):
             self.gps_thread.start()
 
         self.splash.start_fade_out()
+
+    # --- 機能の実装 ---
+
+    @pyqtSlot()
+    def reset_fuel_integrator(self):
+        print("★ Fuel Integrator Reset Requested")
+        self.fuel_calculator.remaining_fuel_ml = self.tank_capacity_ml
+        self.save_fuel_state()
+        print(f"-> Fuel reset to {self.tank_capacity_ml} ml")
+
+    @pyqtSlot()
+    def setup_gopro(self):
+        # requestGoproSetupシグナルは直接workerに繋いでいるため、ここは空でもOK
+        # もし接続以外に何か処理が必要ならここに書く
+        pass
+
+    @pyqtSlot()
+    def setup_lap_time(self):
+        print("★ Lap Time Setup Requested")
+
+    @pyqtSlot()
+    def set_start_line(self):
+        if config.debug:
+            print("MOCK: スタートライン設定をスキップ (スペースキー無効)")
+            self.lap_count = 0
+            self.previous_lap_time = 0.0
+            self.mock_lap_time_elapsed = 0.0
+            if self.machine:
+                info = self.machine.canMaster.dashMachineInfo
+                info.lapCount = 0
+                info.lapTimeDiff = 0.0
+                info.currentLapTime = 0.0
+            return
+
+        lat = self.current_gps_data.get("latitude", 0.0)
+        lon = self.current_gps_data.get("longitude", 0.0)
+
+        if lat != 0.0 and lon != 0.0:
+            self.lap_target_coords = (lat, lon)
+            self.lap_count = 0
+            self.last_lap_time = time.monotonic()
+            self.previous_lap_time = 0.0
+
+            info = self.machine.canMaster.dashMachineInfo
+            info.lapCount = 0
+            info.lapTimeDiff = 0.0
+            info.currentLapTime = 0.0
+            print(f"★ スタートライン設定: {lat}, {lon}")
+        else:
+            print("★ GPS測位が無効なため、スタートラインを設定できません。")
+
+    # ... (以下、on_tpms_update, on_gps_update, show_main_window, onUpdate, save_fuel_state, update_mock_gps_lap, check_lap_crossing は変更なし) ...
 
     @pyqtSlot(dict)
     def on_tpms_update(self, data: dict):
@@ -213,13 +252,11 @@ class Application(QObject, WindowListener):
             self.splash = None
 
     def onUpdate(self) -> None:
-        """GUIタイマーによって定期的に呼び出される (50ms周期)"""
         self.update_count += 1
 
         dash_info = self.machine.canMaster.dashMachineInfo
         fuel_percentage = self.fuel_calculator.remaining_fuel_percent
 
-        # ラップタイム更新処理
         if config.debug:
             self.update_mock_gps_lap(dash_info)
         else:
@@ -227,29 +264,23 @@ class Application(QObject, WindowListener):
                 current_lap_duration = time.monotonic() - self.last_lap_time
                 dash_info.currentLapTime = current_lap_duration
             
-        # --- ★追加: CSVロガーの制御 (50ms間隔) ---
         current_rpm = int(dash_info.rpm)
         
-        # エンジン始動判定 (500rpm以上)
         if current_rpm >= 500:
-            # まだ記録していなければ開始 (ファイル作成 & ヘッダー書き込み)
             if not self.csv_logger.is_active:
                 self.csv_logger.start()
             
-            # データを準備
-            # TPMSデータは受信していない場合もあるので .get() で安全に取得 (デフォルト値 0.0)
             fl_temp = self.latest_tpms_data.get("FL", {}).get("temp_c", 0.0)
             fr_temp = self.latest_tpms_data.get("FR", {}).get("temp_c", 0.0)
             rl_temp = self.latest_tpms_data.get("RL", {}).get("temp_c", 0.0)
             rr_temp = self.latest_tpms_data.get("RR", {}).get("temp_c", 0.0)
 
-            # ロガーに全てのデータを渡す
             self.csv_logger.log(
                 rpm=current_rpm,
                 throttle=dash_info.throttlePosition,
                 water_temp=int(dash_info.waterTemp),
                 oil_press=dash_info.oilPress.oilPress,
-                gear=int(dash_info.gearVoltage.gearType), # ギアは数値(0=N, 1=1速...)で記録
+                gear=int(dash_info.gearVoltage.gearType),
                 fl_temp=fl_temp,
                 fr_temp=fr_temp,
                 rl_temp=rl_temp,
@@ -261,8 +292,6 @@ class Application(QObject, WindowListener):
                 self.csv_logger.stop()
 
         if dash_info.rpm >= 500:
-            # エンジン回転数が 500 RPM 以上の時のみ送信する
-            
             if self.update_count % 40 == 0:
                 logger.debug(f"onUpdate calling send(): RPM={dash_info.rpm}")
 
@@ -272,7 +301,6 @@ class Application(QObject, WindowListener):
                 tpms_data=self.latest_tpms_data,
             )
 
-        # GUI更新
         if self.window is not None:
             self.window.updateDashboard(
                 dash_info,
@@ -285,7 +313,6 @@ class Application(QObject, WindowListener):
         current_ml = self.fuel_calculator.remaining_fuel_ml
         self.fuel_store.save_state(current_ml)
 
-    # --- モック用ラップタイム生成 ---
     def update_mock_gps_lap(self, dash_info):
         self.mock_lap_time_elapsed += 0.050
         dash_info.currentLapTime = self.mock_lap_time_elapsed
@@ -307,7 +334,6 @@ class Application(QObject, WindowListener):
             print(f"MOCK LAP {self.lap_count}: {lap_time:.2f}s (Diff: {delta:+.2f}s)")
             self.mock_lap_duration = self.mock_best_lap + random.uniform(-3.0, 3.0)
 
-    # --- 本番用ラップタイム計測 ---
     def check_lap_crossing(self, current_data: dict):
         if self.lap_target_coords is None:
             return
@@ -348,34 +374,3 @@ class Application(QObject, WindowListener):
                 )
         else:
             self.is_outside_lap_zone = True
-
-    @pyqtSlot()
-    def set_start_line(self):
-        if config.debug:
-            print("MOCK: スタートライン設定をスキップ (スペースキー無効)")
-            self.lap_count = 0
-            self.previous_lap_time = 0.0
-            self.mock_lap_time_elapsed = 0.0
-            if self.machine:
-                info = self.machine.canMaster.dashMachineInfo
-                info.lapCount = 0
-                info.lapTimeDiff = 0.0
-                info.currentLapTime = 0.0
-            return
-
-        lat = self.current_gps_data.get("latitude", 0.0)
-        lon = self.current_gps_data.get("longitude", 0.0)
-
-        if lat != 0.0 and lon != 0.0:
-            self.lap_target_coords = (lat, lon)
-            self.lap_count = 0
-            self.last_lap_time = time.monotonic()
-            self.previous_lap_time = 0.0
-
-            info = self.machine.canMaster.dashMachineInfo
-            info.lapCount = 0
-            info.lapTimeDiff = 0.0
-            info.currentLapTime = 0.0
-            print(f"★ スタートライン設定: {lat}, {lon}")
-        else:
-            print("★ GPS測位が無効なため、スタートラインを設定できません。")

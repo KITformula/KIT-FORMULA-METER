@@ -1,46 +1,46 @@
 from PyQt5.QtCore import QObject, pyqtSignal
-from gpiozero import RotaryEncoder
+from gpiozero import RotaryEncoder, Button # Buttonを追加
 import logging
 
 logger = logging.getLogger(__name__)
 
 class EncoderWorker(QObject):
-    """
-    gpiozeroのロータリーエンコーダ入力をPyQtのシグナルに変換するクラス
-    """
-    # GUIスレッドに通知するためのシグナル
-    rotated_cw = pyqtSignal()   # 時計回り (Clockwise)
-    rotated_ccw = pyqtSignal()  # 反時計回り (Counter-Clockwise)
-    button_pressed = pyqtSignal() # スイッチ押し込み (必要であれば)
+    rotated_cw = pyqtSignal()
+    rotated_ccw = pyqtSignal()
+    button_pressed = pyqtSignal() # これを追加
 
-    def __init__(self, pin_a=27, pin_b=17, parent=None):
+    def __init__(self, pin_a=27, pin_b=17, pin_sw=22, parent=None):
         super().__init__(parent)
         self.rotor = None
+        self.button = None
+        
         try:
-            # max_steps=0 で制限なし回転モード
-            # wrap=True にすると値がループしますが、ここでは方向だけ検知したいので単純化します
             self.rotor = RotaryEncoder(a=pin_a, b=pin_b, max_steps=0)
             self.rotor.when_rotated = self._on_rotate
             self.last_steps = 0
-            logger.info(f"Encoder initialized on pins A={pin_a}, B={pin_b}")
+            
+            # スイッチピンが指定されていれば初期化
+            if pin_sw is not None:
+                self.button = Button(pin_sw)
+                self.button.when_pressed = self._on_button_press
+                
+            logger.info(f"Encoder init: A={pin_a}, B={pin_b}, SW={pin_sw}")
         except Exception as e:
-            logger.error(f"Failed to initialize RotaryEncoder (Simulation Mode?): {e}")
+            logger.error(f"GPIO Init Error: {e}")
 
     def _on_rotate(self):
-        """バックグラウンドスレッドから呼ばれるコールバック"""
-        if self.rotor is None:
-            return
-            
-        current_steps = self.rotor.steps
-        # 値が増えていれば時計回り、減っていれば反時計回り
-        # (配線によっては逆になるので、実機で逆なら emit を入れ替えてください)
-        if current_steps > self.last_steps:
+        if self.rotor is None: return
+        current = self.rotor.steps
+        if current > self.last_steps:
             self.rotated_cw.emit()
         else:
             self.rotated_ccw.emit()
-        
-        self.last_steps = current_steps
+        self.last_steps = current
+
+    def _on_button_press(self):
+        """ボタンが押されたら発火"""
+        self.button_pressed.emit()
 
     def stop(self):
-        if self.rotor:
-            self.rotor.close()
+        if self.rotor: self.rotor.close()
+        if self.button: self.button.close()
