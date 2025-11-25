@@ -649,12 +649,81 @@ class GpsSetScreen(QWidget):
         self.is_processing = False
         self.requestBack.emit()
 
+# ★★★ 新規: 燃料リセット画面 (要望により追加) ★★★
+class FuelResetScreen(QWidget):
+    requestReset = pyqtSignal()
+    requestBack = pyqtSignal()
+
+    def __init__(self):
+        super().__init__()
+        self.layout = QVBoxLayout()
+        
+        title = QLabel("FUEL INTEGRATOR RESET")
+        title.setAlignment(Qt.AlignCenter)
+        title.setStyleSheet("font-size: 32px; font-weight: bold; color: orange; margin-bottom: 20px;")
+        self.layout.addWidget(title)
+
+        self.fuel_label = QLabel("Current: -- %") # 初期表示も整数っぽく
+        self.fuel_label.setAlignment(Qt.AlignCenter)
+        self.fuel_label.setStyleSheet("font-size: 60px; font-weight: bold; color: white;")
+        self.layout.addWidget(self.fuel_label)
+
+        # 完了メッセージ
+        self.message_label = QLabel("RESET COMPLETE")
+        self.message_label.setAlignment(Qt.AlignCenter)
+        self.message_label.setStyleSheet("font-size: 40px; font-weight: bold; color: #00FF00; background-color: rgba(0, 0, 0, 150); border-radius: 10px; padding: 10px;")
+        self.message_label.hide()
+        self.layout.addWidget(self.message_label)
+
+        # 説明書き
+        self.hint_label = QLabel("Push: RESET 100%\nRotary: BACK")
+        self.hint_label.setAlignment(Qt.AlignCenter)
+        self.hint_label.setStyleSheet("font-size: 20px; color: #AAA; margin-top: 20px;")
+        self.layout.addWidget(self.hint_label)
+
+        self.setLayout(self.layout)
+        
+        # 背景色
+        palette = self.palette()
+        palette.setColor(self.backgroundRole(), QColor("#333"))
+        self.setPalette(palette)
+        self.setAutoFillBackground(True)
+
+    def showEvent(self, event):
+        self.message_label.hide()
+        self.hint_label.show()
+        super().showEvent(event)
+
+    def update_fuel(self, percent: float):
+        # ★修正: 小数点以下を表示せず、整数で表示する
+        self.fuel_label.setText(f"Current: {int(percent)} %")
+
+    def handle_input(self, input_type: str) -> bool:
+        if self.message_label.isVisible(): return True
+
+        if input_type == "ENTER":
+            self.requestReset.emit()
+            self.hint_label.hide()
+            self.message_label.show()
+            QTimer.singleShot(1500, self._finish_and_back)
+            return True
+        elif input_type in ["CW", "CCW"]:
+            self.requestBack.emit()
+            return True
+        return False
+
+    def _finish_and_back(self):
+        self.message_label.hide()
+        self.hint_label.show()
+        self.requestBack.emit()
+
 
 # --- 3. 設定画面 (修正) ---
 class SettingsScreen(QWidget):
     # requestSetStartLine = pyqtSignal() # <-- 廃止
     requestOpenGpsMenu = pyqtSignal()    # <-- ★新規: GPSメニューを開くシグナル
-    requestResetFuel = pyqtSignal()
+    requestOpenFuelMenu = pyqtSignal()   # <-- ★新規: 燃料リセットメニューを開くシグナル
+    # requestResetFuel = pyqtSignal()    # <-- 廃止（サブメニューに移動）
     requestOpenGoProMenu = pyqtSignal()
     requestOpenLSDMenu = pyqtSignal()
     requestLapTimeSetup = pyqtSignal()
@@ -688,9 +757,10 @@ class SettingsScreen(QWidget):
             }
         """)
         
+        # ★修正: 項目2をメニュー遷移に変更
         self.items = [
-            "1. Set GPS Start Line >",  # 表記を少し変更
-            "2. Reset Fuel Integrator",
+            "1. Set GPS Start Line >",
+            "2. Fuel Reset Menu >", 
             "3. GoPro Menu >",
             "4. LSD Adjustment >",
             "5. Lap Time Settings",
@@ -727,10 +797,9 @@ class SettingsScreen(QWidget):
         elif input_type == "ENTER":
             # インデックスに応じてシグナルを発行
             if current_row == 0:
-                # self.requestSetStartLine.emit() <-- 変更前
-                self.requestOpenGpsMenu.emit()    # <-- ★変更後: GPSメニューへ遷移
+                self.requestOpenGpsMenu.emit()
             elif current_row == 1:
-                self.requestResetFuel.emit()
+                self.requestOpenFuelMenu.emit() # ★変更: リセットではなくメニューを開く
             elif current_row == 2:
                 self.requestOpenGoProMenu.emit()
             elif current_row == 3:
@@ -772,9 +841,9 @@ class MainDisplayWindow(QDialog):
         
         # 2. Settings (Main Menu)
         self.settings = SettingsScreen()
-        # self.settings.requestSetStartLine.connect(self.requestSetStartLine.emit) <-- 削除
-        self.settings.requestOpenGpsMenu.connect(self.open_gps_menu) # ★追加: GPS画面へ
-        self.settings.requestResetFuel.connect(self.requestResetFuel.emit)
+        self.settings.requestOpenGpsMenu.connect(self.open_gps_menu)
+        self.settings.requestOpenFuelMenu.connect(self.open_fuel_menu) # ★接続
+        # self.settings.requestResetFuel.connect(self.requestResetFuel.emit) # <-- 削除
         self.settings.requestOpenGoProMenu.connect(self.open_gopro_menu)
         self.settings.requestOpenLSDMenu.connect(self.open_lsd_menu)
         self.settings.requestLapTimeSetup.connect(self.requestLapTimeSetup.emit)
@@ -793,16 +862,22 @@ class MainDisplayWindow(QDialog):
         self.lsd_menu.lsdLevelChanged.connect(self.requestLsdChange.emit)
         self.lsd_menu.requestBack.connect(self.return_to_settings)
 
-        # ★ 5. GPS Set Screen (新規)
+        # 5. GPS Set Screen
         self.gps_screen = GpsSetScreen()
-        self.gps_screen.requestSetLine.connect(self.requestSetStartLine.emit) # 決定で座標設定
+        self.gps_screen.requestSetLine.connect(self.requestSetStartLine.emit)
         self.gps_screen.requestBack.connect(self.return_to_settings)
         
+        # ★ 6. Fuel Reset Screen (新規)
+        self.fuel_screen = FuelResetScreen()
+        self.fuel_screen.requestReset.connect(self.requestResetFuel.emit) # リセット実行
+        self.fuel_screen.requestBack.connect(self.return_to_settings)
+
         self.stack.addWidget(self.dashboard)   # Index 0
         self.stack.addWidget(self.settings)    # Index 1
         self.stack.addWidget(self.gopro_menu)  # Index 2
         self.stack.addWidget(self.lsd_menu)    # Index 3
         self.stack.addWidget(self.gps_screen)  # Index 4
+        self.stack.addWidget(self.fuel_screen) # Index 5
         
         layout = QGridLayout()
         layout.setContentsMargins(0, 0, 0, 0)
@@ -819,8 +894,11 @@ class MainDisplayWindow(QDialog):
     def open_lsd_menu(self):
         self.stack.setCurrentWidget(self.lsd_menu)
 
-    def open_gps_menu(self): # ★追加
+    def open_gps_menu(self):
         self.stack.setCurrentWidget(self.gps_screen)
+    
+    def open_fuel_menu(self): # ★追加
+        self.stack.setCurrentWidget(self.fuel_screen)
 
     def return_to_settings(self):
         self.stack.setCurrentWidget(self.settings)
@@ -836,15 +914,18 @@ class MainDisplayWindow(QDialog):
         self.gopro_menu.update_battery(value)
 
     # --- 描画更新 ---
-    def updateDashboard(self, dashMachineInfo, fuel_percentage, tpms_data, gps_data): # ★ gps_dataを追加
+    def updateDashboard(self, dashMachineInfo, fuel_percentage, tpms_data, gps_data): 
         current_widget = self.stack.currentWidget()
 
         if current_widget == self.dashboard:
             self.dashboard.updateDashboard(dashMachineInfo, fuel_percentage, tpms_data)
         
-        # ★追加: GPS画面が表示中ならGPSデータを更新
         elif current_widget == self.gps_screen:
             self.gps_screen.update_data(gps_data)
+
+        # ★追加: 燃料画面が表示中なら燃料％を更新
+        elif current_widget == self.fuel_screen:
+            self.fuel_screen.update_fuel(fuel_percentage)
 
     # --- 入力処理 ---
     def input_cw(self):
