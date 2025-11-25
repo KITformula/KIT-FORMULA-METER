@@ -80,6 +80,9 @@ class Application(QObject, WindowListener):
         self.is_outside_lap_zone = True
         self.current_gps_data = {}
 
+        # LSDの現在のレベルを保持
+        self.current_lsd_level = 1
+
         if config.debug:
             print("★ GPSワーカーはモックモードで起動します ★")
             self.mock_lap_time_elapsed = 0.0
@@ -154,9 +157,13 @@ class Application(QObject, WindowListener):
         self.window.requestSetStartLine.connect(self.set_start_line)
         self.window.requestResetFuel.connect(self.reset_fuel_integrator)
         self.window.requestLapTimeSetup.connect(self.setup_lap_time)
+
+        # --- LSD変更シグナルを接続 ---
+        self.window.requestLsdChange.connect(self.change_lsd_level)
         
         # --- ★ GoPro関連の接続 (新規画面からの操作) ---
         self.window.requestGoProConnect.connect(self.gopro_worker.start_connection)
+        self.window.requestGoProDisconnect.connect(self.gopro_worker.stop)
         self.window.requestGoProRecStart.connect(self.gopro_worker.send_command_record_start)
         self.window.requestGoProRecStop.connect(self.gopro_worker.send_command_record_stop)
         
@@ -304,10 +311,12 @@ class Application(QObject, WindowListener):
             )
 
         if self.window is not None:
+            # ★ ここを修正: current_gps_data を 4つ目の引数として渡す
             self.window.updateDashboard(
                 dash_info,
                 fuel_percentage,
                 self.latest_tpms_data,
+                self.current_gps_data
             )
         return super().onUpdate()
 
@@ -376,3 +385,19 @@ class Application(QObject, WindowListener):
                 )
         else:
             self.is_outside_lap_zone = True
+
+            
+    @pyqtSlot(int)
+    def change_lsd_level(self, level: int):
+        """
+        GUIでLSDのレベルが変更されたときに呼ばれるスロット
+        ここで車体のモーター制御などを行う
+        """
+        print(f"★ LSD Level Changed to: {level}")
+        self.current_lsd_level = level
+
+        # TODO: ここに実際のハードウェア制御コードを記述する
+        # 例: CANバス経由でモータードライバーに指令を送る、あるいはGPIO/PWM制御など
+        # if not config.debug:
+        #     # 例: self.motor_controller.set_level(level)
+        #     pass

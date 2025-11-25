@@ -22,7 +22,7 @@ class GoProWorker(QObject):
     def __init__(self):
         super().__init__()
         self.target_address = None
-        self.ignore_addresses = set()  # 接続失敗したアドレスを除外するリスト
+        self.ignore_addresses = set()
         
         self.loop = None
         self.thread = None
@@ -30,12 +30,10 @@ class GoProWorker(QObject):
         self._command_queue = asyncio.Queue()
 
     def start_connection(self):
-        """GUIから呼ばれる: 接続処理を別スレッドで開始"""
         if self.thread and self.thread.is_alive():
             return
         
         self._keep_running = True
-        # 既存のターゲット情報をリセット（再スキャンさせるため）
         self.target_address = None
         self.ignore_addresses.clear()
         
@@ -44,23 +42,22 @@ class GoProWorker(QObject):
 
     def stop(self):
         """GUIから呼ばれる: 処理を停止"""
+        # ▼ ログ追加: ボタンが効いているか確認しやすくする
+        logger.info(">>> GoProWorker: STOP SIGNAL RECEIVED <<<")
+        
         self._keep_running = False
         if self.loop:
-            # コマンドキューにNoneを入れて待機状態を解除させる
             self.loop.call_soon_threadsafe(self._command_queue.put_nowait, None)
 
     def send_command_record_start(self):
-        """録画開始コマンドをキューに入れる"""
         if self.loop:
             self.loop.call_soon_threadsafe(self._command_queue.put_nowait, "RECORD_START")
 
     def send_command_record_stop(self):
-        """録画停止コマンドをキューに入れる"""
         if self.loop:
             self.loop.call_soon_threadsafe(self._command_queue.put_nowait, "RECORD_STOP")
 
     def _run_async_loop(self):
-        """非同期ループを回すスレッド本体"""
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
         try:
@@ -69,12 +66,18 @@ class GoProWorker(QObject):
             logger.error(f"GoPro Worker Critical Error: {e}")
             self.status_changed.emit(f"Sys Error: {e}")
         finally:
+            try:
+                tasks = asyncio.all_tasks(self.loop)
+                for task in tasks:
+                    task.cancel()
+                self.loop.run_until_complete(asyncio.gather(*tasks, return_exceptions=True))
+            except Exception:
+                pass
             self.loop.close()
             self.thread = None
+            self.status_changed.emit("Disconnected")
 
     async def _main_logic(self):
-        """record_fast1.py のロジックをベースにしたメインループ"""
-        
         while self._keep_running:
             try:
                 # -------------------------------------------------
@@ -84,20 +87,30 @@ class GoProWorker(QObject):
                     self.status_changed.emit("Scanning...")
                     logger.info("Scanning for GoPro...")
 
-                    # スキャン時間を少し長めに (8.0秒)
-                    # 名前がGoProで、かつ除外リストにないものを探す
-                    device = await BleakScanner.find_device_by_filter(
-                        lambda d, ad: d.name and "GoPro" in d.name and d.address not in self.ignore_addresses,
-                        timeout=8.0
-                    )
+                    if not self._command_queue.empty():
+                        cmd = self._command_queue.get_nowait()
+                        if cmd is None:
+                            return
+
+                    try:
+                        # ▼ 修正: タイムアウトを 8.0 -> 3.0 に短縮してレスポンス向上
+                        device = await BleakScanner.find_device_by_filter(
+                            lambda d, ad: d.name and "GoPro" in d.name and d.address not in self.ignore_addresses,
+                            timeout=3.0 
+                        )
+                    except asyncio.TimeoutError:
+                        device = None
+
+                    if not self._keep_running:
+                        return
 
                     if not device:
                         self.status_changed.emit("Not Found / Retrying")
-                        # 除外リストが溜まっていたら一度クリアして再挑戦させる
                         if self.ignore_addresses:
                             logger.info(f"Ignored addresses: {self.ignore_addresses}")
                         
-                        await asyncio.sleep(2.0)
+                        # ▼ 修正: 待機時間を 2.0 -> 1.0 に短縮
+                        await asyncio.sleep(1.0)
                         continue
                     
                     self.target_address = device.address
@@ -109,22 +122,17 @@ class GoProWorker(QObject):
                 # -------------------------------------------------
                 self.status_changed.emit("Connecting...")
                 
-                # 接続時のタイムアウトを20秒に設定
                 async with BleakClient(self.target_address, timeout=20.0, disconnected_callback=self._on_disconnect) as client:
                     if not client.is_connected:
                         raise Exception("Connection failed (is_connected=False)")
 
                     self.status_changed.emit("Pairing...")
-                    
-                    # ペアリング試行 (Windows等で重要)
                     try:
                         await client.pair(protection_level=2)
                         logger.info("Pairing requested")
                     except Exception as e:
-                        # 既にペアリング済み等の場合もあるためログのみで続行
                         logger.warning(f"Pairing warning (continuing): {e}")
 
-                    # 接続確認 (バッテリー読み取り)
                     self.status_changed.emit("Verifying...")
                     try:
                         bat_val = await client.read_gatt_char(UUID_BATTERY_LEVEL)
@@ -134,7 +142,6 @@ class GoProWorker(QObject):
                         self.battery_changed.emit(bat_percent)
                         self.connection_success.emit(True)
                         
-                        # 成功したので除外リストはクリア
                         self.ignore_addresses.clear()
                         
                     except Exception as e:
@@ -147,11 +154,11 @@ class GoProWorker(QObject):
                     logger.info("Entered command loop")
                     while self._keep_running and client.is_connected:
                         try:
-                            # キューからコマンドを取り出す (タイムアウト付きでハートビート確認)
                             cmd = await asyncio.wait_for(self._command_queue.get(), timeout=5.0)
 
                             if cmd is None:
-                                break  # stop()が呼ばれた
+                                logger.info("Stop command received. Exiting main loop.")
+                                return
 
                             if cmd == "RECORD_START":
                                 self.status_changed.emit("REC: Starting...")
@@ -164,38 +171,35 @@ class GoProWorker(QObject):
                                 self.status_changed.emit("Ready")
 
                         except asyncio.TimeoutError:
-                            # 一定時間操作がなければバッテリーを読んで生存確認
                             try:
                                 bat_val = await client.read_gatt_char(UUID_BATTERY_LEVEL)
                                 bat_percent = int(bat_val[0])
-                                # バッテリー残量シグナルを発行
                                 self.battery_changed.emit(bat_percent)
                             except Exception as hb_err:
                                 logger.warning(f"Heartbeat failed: {hb_err}")
-                                break # ループを抜けて再接続へ
+                                break 
 
                         except Exception as e:
                             logger.error(f"Command Loop Error: {e}")
                             break
 
             # -------------------------------------------------
-            # 4. エラーハンドリングと修復 (record_fast1.py準拠)
+            # 4. エラーハンドリング
             # -------------------------------------------------
             except (BleakError, Exception) as e:
+                if not self._keep_running:
+                    return
+
                 logger.error(f"Connection/Runtime Error: {e}")
                 self.status_changed.emit("Error / Retrying...")
                 self.connection_success.emit(False)
 
-                # ターゲットがあった場合、除外リストに追加
                 if self.target_address:
                     logger.info(f"Adding {self.target_address} to ignore list")
                     self.ignore_addresses.add(self.target_address)
 
-                    # ★ 自己修復: ペアリング解除 (Unpair) を試みる
-                    # これによりOS側のキャッシュを削除し、次回クリーンに接続させる
                     self.status_changed.emit("Cleaning up...")
                     try:
-                        # 一時的なクライアントを作成してUnpairだけ試みる
                         async with BleakClient(self.target_address) as temp_client:
                             await temp_client.unpair()
                         logger.info("Unpair successful")
@@ -203,16 +207,14 @@ class GoProWorker(QObject):
                         logger.warning(f"Unpair failed: {unpair_err}")
 
             finally:
-                # ターゲット情報をリセットして再スキャンへ (3秒待機)
-                if self._keep_running:
-                    self.target_address = None
-                    await asyncio.sleep(3.0)
+                if not self._keep_running:
+                    return
+
+                self.target_address = None
+                await asyncio.sleep(3.0)
 
     def _on_disconnect(self, client):
-        """切断コールバック"""
         logger.info("GoPro Disconnected callback")
         self.connection_success.emit(False)
-        self.status_changed.emit("Disconnected")
-        # ループ内の wait_for を解除するためにキューにダミーを入れる
-        if self.loop:
+        if self.loop and self._keep_running:
             self.loop.call_soon_threadsafe(self._command_queue.put_nowait, "DISCONNECTED_EVENT")

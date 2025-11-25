@@ -1,5 +1,5 @@
 # from abc import ABCMeta, abstractmethod
-
+import time
 from PyQt5 import QtCore
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal
 from PyQt5.QtGui import QColor
@@ -279,10 +279,11 @@ class DashboardWidget(QWidget):
             super().keyPressEvent(event)
 
 
-# --- 2. GoPro専用メニュー画面 (修正済) ---
+# --- 2. GoPro専用メニュー画面 ---
 class GoProMenuScreen(QWidget):
     # 操作シグナル
     requestConnect = pyqtSignal()
+    requestDisconnect = pyqtSignal()
     requestRecStart = pyqtSignal()
     requestRecStop = pyqtSignal()
     requestBack = pyqtSignal()
@@ -290,6 +291,7 @@ class GoProMenuScreen(QWidget):
     def __init__(self):
         super().__init__()
         self.layout = QVBoxLayout()
+        self.shown_timestamp = 0.0
         
         # タイトル
         title = QLabel("GoPro Settings")
@@ -318,9 +320,10 @@ class GoProMenuScreen(QWidget):
         
         self.items = [
             "1. Connect / Retry",
-            "2. Record START",
-            "3. Record STOP",
-            "4. << BACK"
+            "2. Disconnect",
+            "3. Record START",
+            "4. Record STOP",
+            "5. << BACK"
         ]
         self.list_widget.addItems(self.items)
         self.list_widget.setCurrentRow(0)
@@ -333,7 +336,7 @@ class GoProMenuScreen(QWidget):
         self.status_label.setStyleSheet("font-size: 20px; color: #AAA; border-top: 1px solid #555; padding: 10px;")
         self.layout.addWidget(self.status_label)
 
-        # ★★★ 追加: バッテリー表示エリア（一番下） ★★★
+        # バッテリー表示エリア
         self.battery_label = QLabel("Battery: --%")
         self.battery_label.setAlignment(Qt.AlignCenter)
         self.battery_label.setStyleSheet("font-size: 24px; font-weight: bold; color: #AAA; padding: 10px;")
@@ -346,6 +349,10 @@ class GoProMenuScreen(QWidget):
         palette.setColor(self.backgroundRole(), QColor("#333"))
         self.setPalette(palette)
         self.setAutoFillBackground(True)
+
+    def showEvent(self, event):
+        self.shown_timestamp = time.time()
+        super().showEvent(event)
 
     def update_status(self, text: str):
         """Workerからのステータス通知を表示"""
@@ -370,6 +377,10 @@ class GoProMenuScreen(QWidget):
         self.battery_label.setStyleSheet(f"font-size: 24px; font-weight: bold; color: {color}; padding: 10px;")
 
     def handle_input(self, input_type: str) -> bool:
+        # 誤操作対策: 画面表示直後の入力無視
+        if time.time() - self.shown_timestamp < 0.5:
+            return True
+
         current_row = self.list_widget.currentRow()
         
         if input_type == "CW":
@@ -390,21 +401,206 @@ class GoProMenuScreen(QWidget):
             if current_row == 0:
                 self.requestConnect.emit()
             elif current_row == 1:
-                self.requestRecStart.emit()
+                self.update_status("Disconnecting...")
+                self.requestDisconnect.emit()
             elif current_row == 2:
-                self.requestRecStop.emit()
+                self.requestRecStart.emit()
             elif current_row == 3:
+                self.requestRecStop.emit()
+            elif current_row == 4:
                 self.requestBack.emit()
             return True
 
         return False
 
 
-# --- 3. 設定画面 ---
+class LSDMenuScreen(QWidget):
+    # レベル変更時に発火するシグナル (int: 新しいレベル)
+    lsdLevelChanged = pyqtSignal(int)
+    requestBack = pyqtSignal()
+
+    def __init__(self):
+        super().__init__()
+        self.layout = QVBoxLayout()
+        
+        # タイトル
+        title = QLabel("LSD ADJUSTMENT")
+        title.setAlignment(Qt.AlignCenter)
+        title.setStyleSheet("font-size: 32px; font-weight: bold; color: #FF00FF; margin-bottom: 20px;")
+        self.layout.addWidget(title)
+
+        # 現在のレベル表示
+        self.current_level = 1
+        self.max_level = 5  # 必要に応じて変更してください（例: 3段階、5段階など）
+        self.min_level = 1
+
+        self.level_label = QLabel(f"LEVEL: {self.current_level}")
+        self.level_label.setAlignment(Qt.AlignCenter)
+        self.level_label.setStyleSheet("font-size: 80px; font-weight: bold; color: white;")
+        self.layout.addWidget(self.level_label)
+
+        # 説明書き
+        hint_label = QLabel("Rotary: Adjust Level\nPush: BACK")
+        hint_label.setAlignment(Qt.AlignCenter)
+        hint_label.setStyleSheet("font-size: 20px; color: #AAA; margin-top: 20px;")
+        self.layout.addWidget(hint_label)
+
+        self.setLayout(self.layout)
+        
+        # 背景色設定
+        palette = self.palette()
+        palette.setColor(self.backgroundRole(), QColor("#333"))
+        self.setPalette(palette)
+        self.setAutoFillBackground(True)
+
+    def handle_input(self, input_type: str) -> bool:
+        if input_type == "CW":
+            # 時計回りでレベルアップ
+            if self.current_level < self.max_level:
+                self.current_level += 1
+                self._update_display()
+                self.lsdLevelChanged.emit(self.current_level)
+            return True 
+
+        elif input_type == "CCW":
+            # 反時計回りでレベルダウン
+            if self.current_level > self.min_level:
+                self.current_level -= 1
+                self._update_display()
+                self.lsdLevelChanged.emit(self.current_level)
+            return True
+
+        elif input_type == "ENTER":
+            # 決定ボタンで戻る
+            self.requestBack.emit()
+            return True
+
+        return False
+
+    def _update_display(self):
+        self.level_label.setText(f"LEVEL: {self.current_level}")
+
+
+# ★★★ 新規: GPS設定画面 ★★★
+class GpsSetScreen(QWidget):
+    requestSetLine = pyqtSignal()  # 決定ボタンで発火（座標設定）
+    requestBack = pyqtSignal()     # 戻る
+
+    def __init__(self):
+        super().__init__()
+        self.layout = QVBoxLayout()
+        self.is_processing = False  # 連打防止用フラグ
+        # self.shown_timestamp = 0.0  # ★削除: ハードウェア側で対処するため不要
+        
+        # タイトル
+        title = QLabel("GPS START LINE SETTING")
+        title.setAlignment(Qt.AlignCenter)
+        title.setStyleSheet("font-size: 32px; font-weight: bold; color: cyan; margin-bottom: 20px;")
+        self.layout.addWidget(title)
+
+        # 値表示用ボックス (TitleValueBoxを再利用)
+        self.latBox = TitleValueBox("Latitude")
+        self.lonBox = TitleValueBox("Longitude")
+        self.satsBox = TitleValueBox("Sats/Quality")
+
+        # フォントサイズを少し大きく調整 (1.0 -> 0.6 -> 0.3)
+        for box in [self.latBox, self.lonBox, self.satsBox]:
+            box.valueLabel.setFontScale(0.3)
+
+        # レイアウトに追加
+        infoLayout = QGridLayout()
+        infoLayout.addWidget(self.latBox, 0, 0)
+        infoLayout.addWidget(self.lonBox, 0, 1)
+        infoLayout.addWidget(self.satsBox, 1, 0, 1, 2) # 衛星数は下段中央
+        
+        self.layout.addLayout(infoLayout)
+
+        # ★★★ 追加: 設定完了メッセージ表示エリア ★★★
+        self.message_label = QLabel("START LINE SET!")
+        self.message_label.setAlignment(Qt.AlignCenter)
+        # 緑色で目立つように表示
+        self.message_label.setStyleSheet("font-size: 40px; font-weight: bold; color: #00FF00; background-color: rgba(0, 0, 0, 150); border-radius: 10px; padding: 10px;")
+        self.message_label.hide() # 最初は隠しておく
+        self.layout.addWidget(self.message_label)
+
+        # 操作説明
+        self.hint_label = QLabel("Push: SET CURRENT POS\nRotary: BACK")
+        self.hint_label.setAlignment(Qt.AlignCenter)
+        self.hint_label.setStyleSheet("font-size: 20px; color: #AAA; margin-top: 20px;")
+        self.layout.addWidget(self.hint_label)
+
+        self.setLayout(self.layout)
+        
+        # 背景色
+        palette = self.palette()
+        palette.setColor(self.backgroundRole(), QColor("#333"))
+        self.setPalette(palette)
+        self.setAutoFillBackground(True)
+
+    def showEvent(self, event):
+        """画面が表示されたときに呼ばれるイベント"""
+        # 画面表示時は必ず初期状態（ヒント表示、メッセージ非表示）に戻す
+        self.message_label.hide()
+        self.hint_label.show()
+        self.is_processing = False
+        # self.shown_timestamp の更新処理は削除
+        
+        super().showEvent(event)
+
+    def update_data(self, gps_data: dict):
+        """リアルタイム更新用メソッド"""
+        lat = gps_data.get("latitude", 0.0)
+        lon = gps_data.get("longitude", 0.0)
+        sats = gps_data.get("sats", 0)
+        quality = gps_data.get("quality", 0)
+
+        self.latBox.updateValueLabel(f"{lat:.6f}")
+        self.lonBox.updateValueLabel(f"{lon:.6f}")
+        self.satsBox.updateValueLabel(f"Sat:{sats} Q:{quality}")
+
+    def handle_input(self, input_type: str) -> bool:
+        # 画面表示直後の時間チェック (shown_timestamp) は削除
+
+        # 処理中（完了メッセージ表示中）は入力を無視
+        if self.is_processing:
+            return True
+
+        if input_type == "ENTER":
+            self.is_processing = True # 入力ブロック開始
+
+            # 1. 決定ボタンで座標設定シグナルを発行
+            self.requestSetLine.emit()
+            
+            # 2. 視覚的フィードバックを表示
+            self.hint_label.hide()       # ヒントを隠す
+            self.message_label.show()    # 「SET!」を表示
+            
+            # 3. 1.5秒後に自動で戻る
+            QTimer.singleShot(1500, self._finish_and_back)
+            return True 
+        
+        elif input_type in ["CW", "CCW"]:
+            # ロータリー操作で戻る
+            self.requestBack.emit()
+            return True
+
+        return False
+
+    def _finish_and_back(self):
+        """遅延実行用: 状態を戻して画面遷移"""
+        self.message_label.hide()
+        self.hint_label.show()
+        self.is_processing = False
+        self.requestBack.emit()
+
+
+# --- 3. 設定画面 (修正) ---
 class SettingsScreen(QWidget):
-    requestSetStartLine = pyqtSignal()
+    # requestSetStartLine = pyqtSignal() # <-- 廃止
+    requestOpenGpsMenu = pyqtSignal()    # <-- ★新規: GPSメニューを開くシグナル
     requestResetFuel = pyqtSignal()
     requestOpenGoProMenu = pyqtSignal()
+    requestOpenLSDMenu = pyqtSignal()
     requestLapTimeSetup = pyqtSignal()
     requestExit = pyqtSignal()
 
@@ -418,6 +614,7 @@ class SettingsScreen(QWidget):
         self.layout.addWidget(title)
 
         self.list_widget = QListWidget()
+        # (スタイルシートは既存のまま)
         self.list_widget.setStyleSheet("""
             QListWidget {
                 font-size: 24px;
@@ -436,11 +633,12 @@ class SettingsScreen(QWidget):
         """)
         
         self.items = [
-            "1. Set GPS Start Line",
+            "1. Set GPS Start Line >",  # 表記を少し変更
             "2. Reset Fuel Integrator",
             "3. GoPro Menu >",
-            "4. Lap Time Settings",
-            "5. EXIT"
+            "4. LSD Adjustment >",
+            "5. Lap Time Settings",
+            "6. EXIT"
         ]
         self.list_widget.addItems(self.items)
         self.list_widget.setCurrentRow(0)
@@ -471,39 +669,44 @@ class SettingsScreen(QWidget):
             return True
 
         elif input_type == "ENTER":
+            # インデックスに応じてシグナルを発行
             if current_row == 0:
-                self.requestSetStartLine.emit()
+                # self.requestSetStartLine.emit() <-- 変更前
+                self.requestOpenGpsMenu.emit()    # <-- ★変更後: GPSメニューへ遷移
             elif current_row == 1:
                 self.requestResetFuel.emit()
             elif current_row == 2:
                 self.requestOpenGoProMenu.emit()
             elif current_row == 3:
-                self.requestLapTimeSetup.emit()
+                self.requestOpenLSDMenu.emit()
             elif current_row == 4:
+                self.requestLapTimeSetup.emit()
+            elif current_row == 5:
                 self.requestExit.emit()
             return True
 
         return False
 
 
-# --- 4. メインウィンドウ ---
+# --- 4. メインウィンドウ (修正) ---
 class MainDisplayWindow(QDialog):
     requestSetStartLine = pyqtSignal()
     requestResetFuel = pyqtSignal()
     requestGoProConnect = pyqtSignal()
+    requestGoProDisconnect = pyqtSignal()
     requestGoProRecStart = pyqtSignal()
     requestGoProRecStop = pyqtSignal()
     requestLapTimeSetup = pyqtSignal()
+    requestLsdChange = pyqtSignal(int)
 
     def __init__(self, listener: WindowListener):
         super(MainDisplayWindow, self).__init__(None)
         self.resize(800, 480)
-        
         palette = QApplication.palette()
         palette.setColor(self.backgroundRole(), QColor("#000"))
         palette.setColor(self.foregroundRole(), QColor("#FFF"))
         self.setPalette(palette)
-
+        
         self.listener = listener
         self.stack = QStackedWidget()
         
@@ -513,22 +716,37 @@ class MainDisplayWindow(QDialog):
         
         # 2. Settings (Main Menu)
         self.settings = SettingsScreen()
-        self.settings.requestSetStartLine.connect(self.requestSetStartLine.emit)
+        # self.settings.requestSetStartLine.connect(self.requestSetStartLine.emit) <-- 削除
+        self.settings.requestOpenGpsMenu.connect(self.open_gps_menu) # ★追加: GPS画面へ
         self.settings.requestResetFuel.connect(self.requestResetFuel.emit)
         self.settings.requestOpenGoProMenu.connect(self.open_gopro_menu)
+        self.settings.requestOpenLSDMenu.connect(self.open_lsd_menu)
         self.settings.requestLapTimeSetup.connect(self.requestLapTimeSetup.emit)
         self.settings.requestExit.connect(self.return_to_dashboard)
         
-        # 3. GoPro Menu (Sub Menu)
+        # 3. GoPro Menu
         self.gopro_menu = GoProMenuScreen()
         self.gopro_menu.requestConnect.connect(self.requestGoProConnect.emit)
+        self.gopro_menu.requestDisconnect.connect(self.requestGoProDisconnect.emit)
         self.gopro_menu.requestRecStart.connect(self.requestGoProRecStart.emit)
         self.gopro_menu.requestRecStop.connect(self.requestGoProRecStop.emit)
         self.gopro_menu.requestBack.connect(self.return_to_settings)
+
+        # 4. LSD Menu
+        self.lsd_menu = LSDMenuScreen()
+        self.lsd_menu.lsdLevelChanged.connect(self.requestLsdChange.emit)
+        self.lsd_menu.requestBack.connect(self.return_to_settings)
+
+        # ★ 5. GPS Set Screen (新規)
+        self.gps_screen = GpsSetScreen()
+        self.gps_screen.requestSetLine.connect(self.requestSetStartLine.emit) # 決定で座標設定
+        self.gps_screen.requestBack.connect(self.return_to_settings)
         
         self.stack.addWidget(self.dashboard)   # Index 0
         self.stack.addWidget(self.settings)    # Index 1
         self.stack.addWidget(self.gopro_menu)  # Index 2
+        self.stack.addWidget(self.lsd_menu)    # Index 3
+        self.stack.addWidget(self.gps_screen)  # Index 4
         
         layout = QGridLayout()
         layout.setContentsMargins(0, 0, 0, 0)
@@ -542,6 +760,12 @@ class MainDisplayWindow(QDialog):
     def open_gopro_menu(self):
         self.stack.setCurrentWidget(self.gopro_menu)
 
+    def open_lsd_menu(self):
+        self.stack.setCurrentWidget(self.lsd_menu)
+
+    def open_gps_menu(self): # ★追加
+        self.stack.setCurrentWidget(self.gps_screen)
+
     def return_to_settings(self):
         self.stack.setCurrentWidget(self.settings)
 
@@ -553,13 +777,18 @@ class MainDisplayWindow(QDialog):
     def updateGoProBattery(self, value: int):
         """Applicationから呼ばれて、ダッシュボードとメニュー両方のバッテリー表示を更新"""
         self.dashboard.updateGoProBattery(value)
-        # ★★★ 追加: GoProメニュー画面のバッテリー表示も更新 ★★★
         self.gopro_menu.update_battery(value)
 
     # --- 描画更新 ---
-    def updateDashboard(self, dashMachineInfo, fuel_percentage, tpms_data):
-        if self.stack.currentWidget() == self.dashboard:
+    def updateDashboard(self, dashMachineInfo, fuel_percentage, tpms_data, gps_data): # ★ gps_dataを追加
+        current_widget = self.stack.currentWidget()
+
+        if current_widget == self.dashboard:
             self.dashboard.updateDashboard(dashMachineInfo, fuel_percentage, tpms_data)
+        
+        # ★追加: GPS画面が表示中ならGPSデータを更新
+        elif current_widget == self.gps_screen:
+            self.gps_screen.update_data(gps_data)
 
     # --- 入力処理 ---
     def input_cw(self):
