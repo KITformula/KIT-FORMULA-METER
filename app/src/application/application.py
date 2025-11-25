@@ -230,6 +230,9 @@ class Application(QObject, WindowListener):
             self.lap_count = 0
             self.last_lap_time = time.monotonic()
             self.previous_lap_time = 0.0
+            
+            # ★修正: 現在スタートライン上にいるため、ゾーン内フラグをFalse(内側)にする
+            self.is_outside_lap_zone = False
 
             info = self.machine.canMaster.dashMachineInfo
             info.lapCount = 0
@@ -238,6 +241,7 @@ class Application(QObject, WindowListener):
             print(f"★ スタートライン設定: {lat}, {lon}")
         else:
             print("★ GPS測位が無効なため、スタートラインを設定できません。")
+
 
     @pyqtSlot(dict)
     def on_tpms_update(self, data: dict):

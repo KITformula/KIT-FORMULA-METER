@@ -208,7 +208,7 @@ class IconValueBox(QGroupBox):
         self.setLayout(self.layout)
 
     def updateBatteryValueLabel(self, batteryVoltage: BatteryVoltage):
-        display_text = f" {batteryVoltage:.1f} V"
+        display_text = f" {batteryVoltage:.1f}V"
         color_to_set = "#7fff00"
 
         if batteryVoltage < 13.0:
@@ -231,7 +231,7 @@ class IconValueBox(QGroupBox):
         self.valueLabel.setText(display_text)
 
     def updateFuelPercentLabel(self, fuel_percentage: float):
-        display_text = f"{fuel_percentage:.1f} %"
+        display_text = f"{int(fuel_percentage)} %"
         new_color = "#7fff00"
 
         if fuel_percentage < 20.0:
