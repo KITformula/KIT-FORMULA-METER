@@ -34,7 +34,7 @@ class WindowListener:
         pass
 
 
-# --- 1. ダッシュボード画面 (変更なし) ---
+# --- 1. ダッシュボード画面 ---
 class DashboardWidget(QWidget):
     requestSetStartLine = pyqtSignal()
 
@@ -72,6 +72,16 @@ class DashboardWidget(QWidget):
         mainLayout.setRowStretch(0, 1)
         mainLayout.setRowStretch(1, 1)
         mainLayout.setRowStretch(2, 0)
+
+    def updateGoProBattery(self, value: int):
+        color = "#0F0" # 緑
+        if value < 20:
+            color = "#F00" # 赤
+        elif value < 50:
+            color = "#FF0" # 黄
+            
+        self.goproLabel.updateValueLabel(f"{value}%")
+        self.goproLabel.valueLabel.setStyleSheet(f"color: {color}; font-size: 30px; font-weight: bold;")
 
     def handle_input(self, input_type: str) -> bool:
         return False
@@ -156,6 +166,8 @@ class DashboardWidget(QWidget):
         self.lapTimeBox = TitleValueBox("Lap Time")
         self.lapCountBox = TitleValueBox("Lap")
         self.deltaBox = TitleValueBox("Delta")
+        
+        self.goproLabel = TitleValueBox("GoPro Bat")
 
     def createTopGroupBox(self):
         self.topGroupBox = QGroupBox()
@@ -250,10 +262,13 @@ class DashboardWidget(QWidget):
 
         mainLayout.addLayout(lapInfoLayout, 1, 0)
         mainLayout.addWidget(tpmsGridGroup, 2, 0)
+        
+        mainLayout.addWidget(self.goproLabel, 3, 0)
 
         mainLayout.setRowStretch(0, 1)
         mainLayout.setRowStretch(1, 2)
-        mainLayout.setRowStretch(2, 7)
+        mainLayout.setRowStretch(2, 6)
+        mainLayout.setRowStretch(3, 2)
 
         self.rightGroupBox.setLayout(mainLayout)
 
@@ -264,11 +279,132 @@ class DashboardWidget(QWidget):
             super().keyPressEvent(event)
 
 
-# --- 2. 設定画面 (修正版) ---
+# --- 2. GoPro専用メニュー画面 (修正済) ---
+class GoProMenuScreen(QWidget):
+    # 操作シグナル
+    requestConnect = pyqtSignal()
+    requestRecStart = pyqtSignal()
+    requestRecStop = pyqtSignal()
+    requestBack = pyqtSignal()
+
+    def __init__(self):
+        super().__init__()
+        self.layout = QVBoxLayout()
+        
+        # タイトル
+        title = QLabel("GoPro Settings")
+        title.setAlignment(Qt.AlignCenter)
+        title.setStyleSheet("font-size: 32px; font-weight: bold; color: #00FFFF; margin-bottom: 10px;")
+        self.layout.addWidget(title)
+
+        # メニューリスト
+        self.list_widget = QListWidget()
+        self.list_widget.setStyleSheet("""
+            QListWidget {
+                font-size: 24px;
+                background-color: #222;
+                color: white;
+                border: 2px solid #555;
+            }
+            QListWidget::item {
+                padding: 15px;
+            }
+            QListWidget::item:selected {
+                background-color: #008B8B;
+                color: white;
+                border: 2px solid #00FFFF;
+            }
+        """)
+        
+        self.items = [
+            "1. Connect / Retry",
+            "2. Record START",
+            "3. Record STOP",
+            "4. << BACK"
+        ]
+        self.list_widget.addItems(self.items)
+        self.list_widget.setCurrentRow(0)
+        
+        self.layout.addWidget(self.list_widget)
+
+        # ステータス表示エリア
+        self.status_label = QLabel("Status: Not Connected")
+        self.status_label.setAlignment(Qt.AlignCenter)
+        self.status_label.setStyleSheet("font-size: 20px; color: #AAA; border-top: 1px solid #555; padding: 10px;")
+        self.layout.addWidget(self.status_label)
+
+        # ★★★ 追加: バッテリー表示エリア（一番下） ★★★
+        self.battery_label = QLabel("Battery: --%")
+        self.battery_label.setAlignment(Qt.AlignCenter)
+        self.battery_label.setStyleSheet("font-size: 24px; font-weight: bold; color: #AAA; padding: 10px;")
+        self.layout.addWidget(self.battery_label)
+
+        self.setLayout(self.layout)
+        
+        # 背景色
+        palette = self.palette()
+        palette.setColor(self.backgroundRole(), QColor("#333"))
+        self.setPalette(palette)
+        self.setAutoFillBackground(True)
+
+    def update_status(self, text: str):
+        """Workerからのステータス通知を表示"""
+        self.status_label.setText(f"Status: {text}")
+        
+        if "Connected" in text or "Ready" in text or "Recording" in text:
+            self.status_label.setStyleSheet("font-size: 20px; color: #0F0; border-top: 1px solid #555; padding: 10px;")
+        elif "Error" in text or "Failed" in text:
+            self.status_label.setStyleSheet("font-size: 20px; color: #F00; border-top: 1px solid #555; padding: 10px;")
+        else:
+            self.status_label.setStyleSheet("font-size: 20px; color: #FF0; border-top: 1px solid #555; padding: 10px;")
+
+    def update_battery(self, value: int):
+        """Workerからのバッテリー通知を表示"""
+        color = "#0F0" # 緑
+        if value < 20:
+            color = "#F00" # 赤
+        elif value < 50:
+            color = "#FF0" # 黄
+            
+        self.battery_label.setText(f"Battery: {value}%")
+        self.battery_label.setStyleSheet(f"font-size: 24px; font-weight: bold; color: {color}; padding: 10px;")
+
+    def handle_input(self, input_type: str) -> bool:
+        current_row = self.list_widget.currentRow()
+        
+        if input_type == "CW":
+            if current_row < len(self.items) - 1:
+                self.list_widget.setCurrentRow(current_row + 1)
+            else:
+                self.list_widget.setCurrentRow(0)
+            return True 
+
+        elif input_type == "CCW":
+            if current_row > 0:
+                self.list_widget.setCurrentRow(current_row - 1)
+            else:
+                self.list_widget.setCurrentRow(len(self.items) - 1)
+            return True
+
+        elif input_type == "ENTER":
+            if current_row == 0:
+                self.requestConnect.emit()
+            elif current_row == 1:
+                self.requestRecStart.emit()
+            elif current_row == 2:
+                self.requestRecStop.emit()
+            elif current_row == 3:
+                self.requestBack.emit()
+            return True
+
+        return False
+
+
+# --- 3. 設定画面 ---
 class SettingsScreen(QWidget):
     requestSetStartLine = pyqtSignal()
     requestResetFuel = pyqtSignal()
-    requestGoproSetup = pyqtSignal()
+    requestOpenGoProMenu = pyqtSignal()
     requestLapTimeSetup = pyqtSignal()
     requestExit = pyqtSignal()
 
@@ -302,7 +438,7 @@ class SettingsScreen(QWidget):
         self.items = [
             "1. Set GPS Start Line",
             "2. Reset Fuel Integrator",
-            "3. GoPro Connect / Settings", # 文言変更
+            "3. GoPro Menu >",
             "4. Lap Time Settings",
             "5. EXIT"
         ]
@@ -310,34 +446,12 @@ class SettingsScreen(QWidget):
         self.list_widget.setCurrentRow(0)
         
         self.layout.addWidget(self.list_widget)
-
-        # ★ GoProステータス表示エリア
-        self.gopro_status_label = QLabel("GoPro Status: Not Connected")
-        self.gopro_status_label.setAlignment(Qt.AlignCenter)
-        self.gopro_status_label.setStyleSheet("font-size: 20px; color: #AAA; border-top: 1px solid #555; padding: 10px;")
-        self.layout.addWidget(self.gopro_status_label)
-
         self.setLayout(self.layout)
         
         palette = self.palette()
         palette.setColor(self.backgroundRole(), QColor("#333"))
         self.setPalette(palette)
         self.setAutoFillBackground(True)
-
-    def update_gopro_status(self, text: str):
-        """GoProのステータス表示を更新するメソッド"""
-        self.gopro_status_label.setText(f"GoPro Status: {text}")
-        
-        # ★★★ 修正ポイント: "Connected" や "Ready" が含まれていれば緑色にする ★★★
-        if "Connected" in text or "Ready" in text or "Recording" in text:
-            # 接続完了 or 録画中は緑色背景
-            self.gopro_status_label.setStyleSheet("font-size: 20px; color: #0F0; border-top: 1px solid #555; padding: 10px;")
-        elif "Error" in text or "Failed" in text:
-            # エラー時は赤文字
-            self.gopro_status_label.setStyleSheet("font-size: 20px; color: #F00; border-top: 1px solid #555; padding: 10px;")
-        else:
-            # その他（待機中など）は黄色
-            self.gopro_status_label.setStyleSheet("font-size: 20px; color: #FF0; border-top: 1px solid #555; padding: 10px;")
 
     def handle_input(self, input_type: str) -> bool:
         current_row = self.list_widget.currentRow()
@@ -361,8 +475,8 @@ class SettingsScreen(QWidget):
                 self.requestSetStartLine.emit()
             elif current_row == 1:
                 self.requestResetFuel.emit()
-            elif current_row == 2: # GoPro
-                self.requestGoproSetup.emit()
+            elif current_row == 2:
+                self.requestOpenGoProMenu.emit()
             elif current_row == 3:
                 self.requestLapTimeSetup.emit()
             elif current_row == 4:
@@ -371,11 +485,14 @@ class SettingsScreen(QWidget):
 
         return False
 
-# --- 3. メインウィンドウ ---
+
+# --- 4. メインウィンドウ ---
 class MainDisplayWindow(QDialog):
     requestSetStartLine = pyqtSignal()
     requestResetFuel = pyqtSignal()
-    requestGoproSetup = pyqtSignal()
+    requestGoProConnect = pyqtSignal()
+    requestGoProRecStart = pyqtSignal()
+    requestGoProRecStop = pyqtSignal()
     requestLapTimeSetup = pyqtSignal()
 
     def __init__(self, listener: WindowListener):
@@ -390,40 +507,61 @@ class MainDisplayWindow(QDialog):
         self.listener = listener
         self.stack = QStackedWidget()
         
-        # ... (DashboardWidgetはそのまま) ...
+        # 1. Dashboard
         self.dashboard = DashboardWidget(listener)
         self.dashboard.requestSetStartLine.connect(self.requestSetStartLine.emit)
         
-        # ... (SettingsScreenのインスタンス化) ...
+        # 2. Settings (Main Menu)
         self.settings = SettingsScreen()
-        
         self.settings.requestSetStartLine.connect(self.requestSetStartLine.emit)
         self.settings.requestResetFuel.connect(self.requestResetFuel.emit)
-        self.settings.requestGoproSetup.connect(self.requestGoproSetup.emit)
+        self.settings.requestOpenGoProMenu.connect(self.open_gopro_menu)
         self.settings.requestLapTimeSetup.connect(self.requestLapTimeSetup.emit)
         self.settings.requestExit.connect(self.return_to_dashboard)
         
-        self.stack.addWidget(self.dashboard)
-        self.stack.addWidget(self.settings)
+        # 3. GoPro Menu (Sub Menu)
+        self.gopro_menu = GoProMenuScreen()
+        self.gopro_menu.requestConnect.connect(self.requestGoProConnect.emit)
+        self.gopro_menu.requestRecStart.connect(self.requestGoProRecStart.emit)
+        self.gopro_menu.requestRecStop.connect(self.requestGoProRecStop.emit)
+        self.gopro_menu.requestBack.connect(self.return_to_settings)
+        
+        self.stack.addWidget(self.dashboard)   # Index 0
+        self.stack.addWidget(self.settings)    # Index 1
+        self.stack.addWidget(self.gopro_menu)  # Index 2
         
         layout = QGridLayout()
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.stack)
         self.setLayout(layout)
 
-    # ★★★ 追加: GoProステータス更新用メソッド ★★★
-    def updateGoProStatus(self, text: str):
-        """Applicationから呼ばれて、SettingsScreenの表示を更新する"""
-        self.settings.update_gopro_status(text)
+    # --- 画面遷移系メソッド ---
+    def return_to_dashboard(self):
+        self.stack.setCurrentWidget(self.dashboard)
 
-    # ... (updateDashboard, input_cwなどは前回と同じ) ...
+    def open_gopro_menu(self):
+        self.stack.setCurrentWidget(self.gopro_menu)
+
+    def return_to_settings(self):
+        self.stack.setCurrentWidget(self.settings)
+
+    # --- ステータス更新用 ---
+    def updateGoProStatus(self, text: str):
+        """Applicationから呼ばれて、GoProメニューの表示を更新"""
+        self.gopro_menu.update_status(text)
+
+    def updateGoProBattery(self, value: int):
+        """Applicationから呼ばれて、ダッシュボードとメニュー両方のバッテリー表示を更新"""
+        self.dashboard.updateGoProBattery(value)
+        # ★★★ 追加: GoProメニュー画面のバッテリー表示も更新 ★★★
+        self.gopro_menu.update_battery(value)
+
+    # --- 描画更新 ---
     def updateDashboard(self, dashMachineInfo, fuel_percentage, tpms_data):
         if self.stack.currentWidget() == self.dashboard:
             self.dashboard.updateDashboard(dashMachineInfo, fuel_percentage, tpms_data)
 
-    def return_to_dashboard(self):
-        self.stack.setCurrentWidget(self.dashboard)
-
+    # --- 入力処理 ---
     def input_cw(self):
         self._dispatch_input("CW", direction=1)
 
@@ -436,16 +574,12 @@ class MainDisplayWindow(QDialog):
     def _dispatch_input(self, input_type, direction=0):
         current_widget = self.stack.currentWidget()
         
+        # 現在の画面に入力を委譲
         if hasattr(current_widget, "handle_input"):
             consumed = current_widget.handle_input(input_type)
             if consumed:
                 return
 
+        # ダッシュボード画面のみ、ロータリーで設定画面へ遷移できる（トグル動作）
         if input_type in ["CW", "CCW"] and current_widget == self.dashboard:
-            self.switch_screen(direction)
-
-    def switch_screen(self, direction):
-        current = self.stack.currentIndex()
-        count = self.stack.count()
-        next_index = (current + direction) % count
-        self.stack.setCurrentIndex(next_index)
+            self.stack.setCurrentWidget(self.settings)

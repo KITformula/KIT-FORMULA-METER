@@ -4,7 +4,7 @@ import sys
 import threading
 import time
 
-from PyQt5.QtCore import QObject, QTimer, pyqtSlot
+from PyQt5.QtCore import QObject, QTimer, pyqtSlot, Qt
 from PyQt5.QtWidgets import QApplication
 
 from src.fuel.fuel_calculator import FuelCalculator
@@ -20,7 +20,6 @@ from src.util import config
 from src.util.fuel_store import FuelStore
 
 from src.hardware.encoder_worker import EncoderWorker
-# ★ 追加
 from src.gopro.gopro_worker import GoProWorker
 
 logger = logging.getLogger(__name__)
@@ -71,7 +70,7 @@ class Application(QObject, WindowListener):
         self.gps_worker: GpsWorker | None = None
         self.gps_thread: threading.Thread | None = None
 
-        # ★ GoPro Workerの初期化（ここではまだ接続しない）
+        # ★ GoPro Worker
         self.gopro_worker = GoProWorker()
 
         self.lap_count = 0
@@ -151,16 +150,27 @@ class Application(QObject, WindowListener):
 
         self.window = MainDisplayWindow(self)
         
-        # --- シグナル接続 ---
+        # --- シグナル接続 (基本) ---
         self.window.requestSetStartLine.connect(self.set_start_line)
         self.window.requestResetFuel.connect(self.reset_fuel_integrator)
-        
-        # ★ GoPro設定: ボタンが押されたら接続開始
-        self.window.requestGoproSetup.connect(self.gopro_worker.start_connection)
-        # ★ GoProステータス: Workerの状態が変わったら画面に表示
-        self.gopro_worker.status_changed.connect(self.window.updateGoProStatus)
-        
         self.window.requestLapTimeSetup.connect(self.setup_lap_time)
+        
+        # --- ★ GoPro関連の接続 (新規画面からの操作) ---
+        self.window.requestGoProConnect.connect(self.gopro_worker.start_connection)
+        self.window.requestGoProRecStart.connect(self.gopro_worker.send_command_record_start)
+        self.window.requestGoProRecStop.connect(self.gopro_worker.send_command_record_stop)
+        
+        # GoProからのステータス通知をGUIへ
+        self.gopro_worker.status_changed.connect(
+            self.window.updateGoProStatus, 
+            type=Qt.QueuedConnection
+        )
+        
+        # GoProからのバッテリー通知をGUIへ
+        self.gopro_worker.battery_changed.connect(
+            self.window.updateGoProBattery,
+            type=Qt.QueuedConnection
+        )
 
         self.encoder_worker = EncoderWorker(pin_a=27, pin_b=17, pin_sw=22)
         self.encoder_worker.rotated_cw.connect(self.window.input_cw)
@@ -186,12 +196,6 @@ class Application(QObject, WindowListener):
         self.fuel_calculator.remaining_fuel_ml = self.tank_capacity_ml
         self.save_fuel_state()
         print(f"-> Fuel reset to {self.tank_capacity_ml} ml")
-
-    @pyqtSlot()
-    def setup_gopro(self):
-        # requestGoproSetupシグナルは直接workerに繋いでいるため、ここは空でもOK
-        # もし接続以外に何か処理が必要ならここに書く
-        pass
 
     @pyqtSlot()
     def setup_lap_time(self):
@@ -227,8 +231,6 @@ class Application(QObject, WindowListener):
             print(f"★ スタートライン設定: {lat}, {lon}")
         else:
             print("★ GPS測位が無効なため、スタートラインを設定できません。")
-
-    # ... (以下、on_tpms_update, on_gps_update, show_main_window, onUpdate, save_fuel_state, update_mock_gps_lap, check_lap_crossing は変更なし) ...
 
     @pyqtSlot(dict)
     def on_tpms_update(self, data: dict):
