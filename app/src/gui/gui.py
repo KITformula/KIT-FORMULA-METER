@@ -28,6 +28,18 @@ from src.models.models import (
     DashMachineInfo,
 )
 
+# ★★★ 追加: ラップタイム整形用のヘルパー関数 ★★★
+def format_lap_time(seconds: float) -> str:
+    """秒数を 'M:SS.ms' (分:秒.ミリ秒2桁) 形式の文字列に変換する"""
+    if seconds is None or seconds < 0:
+        return "0:00.00"
+    
+    m = int(seconds // 60)
+    s = int(seconds % 60)
+    ms = int((seconds - int(seconds)) * 100)
+    
+    return f"{m}:{s:02d}.{ms:02d}"
+
 
 class WindowListener:
     def onUpdate(self) -> None:
@@ -50,6 +62,19 @@ class DashboardWidget(QWidget):
         palette.setColor(self.backgroundRole(), QColor("#000"))
         palette.setColor(self.foregroundRole(), QColor("#FFF"))
         self.setPalette(palette)
+
+        # ★★★ 変更: グリッド線を表現するためのスタイルシート ★★★
+        self.setStyleSheet("""
+            QGroupBox {
+                border: none;
+                margin: 0px;
+                padding: 0px;
+            }
+            /* 親ボックスの背景を白にすることで、子ウィジェット間の隙間が白い線になる */
+            QGroupBox#LeftBox, QGroupBox#CenterBox, QGroupBox#RightBox {
+                background-color: #FFF; 
+            }
+        """)
 
         self.createAllWidgets()
         self.createTopGroupBox()
@@ -97,7 +122,7 @@ class DashboardWidget(QWidget):
         self.oilTempTitleValueBox.updateTempValueLabel(dashMachineInfo.oilTemp)
         self.oilTempTitleValueBox.updateOilTempWarning(dashMachineInfo.oilTemp)
         self.opsBar.updatePedalBar(dashMachineInfo.oilPress.oilPress)
-        self.fuelPressIconValueBox.updateFuelPressValueLabel(dashMachineInfo.fuelPress)
+        
         self.fanSwitchStateTitleValueBox.updateBoolValueLabel(
             dashMachineInfo.fanEnabled
         )
@@ -106,10 +131,13 @@ class DashboardWidget(QWidget):
         self.tpsTitleValueBox.updateValueLabel(dashMachineInfo.throttlePosition)
         self.bpsFTitleValueBox.updateValueLabel(dashMachineInfo.brakePress.front)
         self.bpsRTitleValueBox.updateValueLabel(dashMachineInfo.brakePress.rear)
-        self.tpsBar.updatePedalBar(dashMachineInfo.throttlePosition)
+        
         self.batteryIconValueBox.updateBatteryValueLabel(dashMachineInfo.batteryVoltage)
         self.fuelcaluculatorIconValueBox.updateFuelPercentLabel(fuel_percentage)
-        self.lapTimeBox.updateValueLabel(f"{dashMachineInfo.currentLapTime:.2f}")
+        
+        formatted_time = format_lap_time(dashMachineInfo.currentLapTime)
+        self.lapTimeBox.updateValueLabel(formatted_time)
+        
         self.lapCountBox.updateValueLabel(dashMachineInfo.lapCount)
 
         diff = dashMachineInfo.lapTimeDiff
@@ -134,11 +162,17 @@ class DashboardWidget(QWidget):
 
     def createAllWidgets(self):
         self.rpmLabel = RpmLabel()
+        # 回転数に枠線を追加するためのスタイル設定
+        # ★修正: borderなし、背景黒
+        self.rpmLabel.setStyleSheet(
+            "border: none; border-radius: 0px; font-weight: bold; color: #FFF; background-color: #000"
+        )
+        
         self.gearLabel = GearLabel()
 
         self.waterTempTitleValueBox = TitleValueBox("Water Temp")
         self.oilTempTitleValueBox = TitleValueBox("Oil Temp")
-        self.fuelPressIconValueBox = IconValueBox()
+        
         self.fanSwitchStateTitleValueBox = TitleValueBox("Fan Switch")
         self.switchStateRemiderLabel = TitleValueBox(
             "SWITCH CHECK! \n1. Fan \n2. TPS MAX"
@@ -152,18 +186,21 @@ class DashboardWidget(QWidget):
         self.bpsFTitleValueBox = TitleValueBox("BPS F")
         self.bpsRTitleValueBox = TitleValueBox("BPS R")
         self.brakeBiasTitleValueBox = TitleValueBox("Brake\nBias F%")
-        self.tpsBar = PedalBar("#0F0", 100)
+        
         self.opsBar = PedalBar("#F00", 300)
 
         self.batteryIconValueBox = IconValueBox()
         self.fuelcaluculatorIconValueBox = IconValueBox()
         self.lapCountLabel = IconValueBox()
-        self.tpms_fl = TpmsBox("FL")
-        self.tpms_fr = TpmsBox("FR")
-        self.tpms_rl = TpmsBox("RL")
-        self.tpms_rr = TpmsBox("RR")
+        self.tpms_fl = TpmsBox("")
+        self.tpms_fr = TpmsBox("")
+        self.tpms_rl = TpmsBox("")
+        self.tpms_rr = TpmsBox("")
 
         self.lapTimeBox = TitleValueBox("Lap Time")
+        # ★修正: ラップタイムのフォントサイズを小さくして枠に収める (0.75 -> 0.55)
+        self.lapTimeBox.valueLabel.setFontScale(0.55)
+
         self.lapCountBox = TitleValueBox("Lap")
         self.deltaBox = TitleValueBox("Delta")
         
@@ -171,7 +208,6 @@ class DashboardWidget(QWidget):
 
     def createTopGroupBox(self):
         self.topGroupBox = QGroupBox()
-        self.topGroupBox.setFlat(True)
         self.topGroupBox.setMaximumHeight(60)
 
         layout = QGridLayout()
@@ -184,64 +220,75 @@ class DashboardWidget(QWidget):
 
     def createLeftGroupBox(self):
         self.leftGroupBox = QGroupBox()
-        self.leftGroupBox.setFlat(True)
-        self.leftGroupBox.setObjectName("LeftBox")
-        self.leftGroupBox.setStyleSheet("QGroupBox#LeftBox { border: 2px solid white;}")
+        self.leftGroupBox.setAttribute(QtCore.Qt.WA_StyledBackground, True)
+        self.leftGroupBox.setObjectName("LeftBox") 
 
         layout = QGridLayout()
 
-        layout.addWidget(self.waterTempTitleValueBox, 0, 1)
+        # レイアウト変更:
+        # 0: ラップタイム (全幅)
+        # 1: 水温 (左) / 油温 (右)
+        # 2: バッテリー (全幅)
+        # 3: 燃料残量 (全幅)
+        
+        layout.addWidget(self.lapTimeBox, 0, 0, 1, 2)
+        layout.addWidget(self.waterTempTitleValueBox, 1, 0)
         layout.addWidget(self.oilTempTitleValueBox, 1, 1)
-        layout.addWidget(self.batteryIconValueBox, 2, 1)
-        layout.addWidget(self.fuelPressIconValueBox, 3, 1)
-        layout.addWidget(self.fuelcaluculatorIconValueBox, 4, 1)
+        layout.addWidget(self.batteryIconValueBox, 2, 0, 1, 2)
+        layout.addWidget(self.fuelcaluculatorIconValueBox, 3, 0, 1, 2)
 
         layout.setRowStretch(0, 1)
         layout.setRowStretch(1, 1)
         layout.setRowStretch(2, 1)
         layout.setRowStretch(3, 1)
-        layout.setRowStretch(4, 1)
 
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
+        # ★修正: 外周(2px)と隙間(2px)を白く見せる
+        layout.setContentsMargins(2, 2, 2, 2)
+        layout.setSpacing(2) 
 
         self.leftGroupBox.setLayout(layout)
 
     def createCenterGroupBox(self):
         self.centerGroupBox = QGroupBox()
-        self.centerGroupBox.setFlat(True)
-        self.centerGroupBox.setStyleSheet("border: 2px solid white;")
+        self.centerGroupBox.setAttribute(QtCore.Qt.WA_StyledBackground, True)
+        self.centerGroupBox.setObjectName("CenterBox")
 
         layout = QGridLayout()
 
-        layout.addWidget(self.rpmLabel, 0, 0, 1, 3)
-        layout.addWidget(self.gearLabel, 1, 0, 1, 3)
-        layout.addWidget(self.lapTimeBox, 2, 0, 1, 3)
-        layout.addWidget(self.tpsBar, 3, 1, 1, 2)
-        layout.addWidget(self.tpsTitleValueBox, 3, 0, 1, 1)
+        # 0: Gear (上寄せ)
+        # 1: RPM
+        # 2: TPS
+        # 3: GoPro Battery
+        
+        layout.addWidget(self.gearLabel, 0, 0, 1, 3, QtCore.Qt.AlignTop) 
+        layout.addWidget(self.rpmLabel, 1, 0, 1, 3)
+        layout.addWidget(self.tpsTitleValueBox, 2, 0, 1, 3)
+        layout.addWidget(self.goproLabel, 3, 0, 1, 3)
 
-        layout.setRowStretch(0, 2)
-        layout.setRowStretch(1, 10)
-        layout.setRowStretch(2, 4)
+        layout.setRowStretch(0, 15)
+        layout.setRowStretch(1, 3)
+        layout.setRowStretch(2, 2)
         layout.setRowStretch(3, 2)
+
+        # ★修正: グリッド線設定
+        layout.setContentsMargins(2, 2, 2, 2)
+        layout.setSpacing(2)
 
         self.centerGroupBox.setLayout(layout)
 
     def createRightGroupBox(self):
         self.rightGroupBox = QGroupBox()
-        self.rightGroupBox.setFlat(True)
-        self.rightGroupBox.setObjectName("RightBox")
-        self.rightGroupBox.setStyleSheet(
-            "QGroupBox#RightBox { border: 2px solid white;}"
-        )
+        self.rightGroupBox.setAttribute(QtCore.Qt.WA_StyledBackground, True)
+        self.rightGroupBox.setObjectName("RightBox") 
 
-        tpmsGridGroup = QGroupBox("TPMS")
-        tpmsGridGroup.setFlat(True)
-        tpmsGridGroup.setStyleSheet("font-size: 16px; font-weight: bold; color: #FFF;")
+        tpmsGridGroup = QGroupBox()
+        tpmsGridGroup.setObjectName("TpmsGridGroup")
+        tpmsGridGroup.setStyleSheet("QGroupBox#TpmsGridGroup { background-color: #FFF; border: none; margin: 0px; padding: 0px; }")
+        tpmsGridGroup.setAttribute(QtCore.Qt.WA_StyledBackground, True)
 
         tpmsLayout = QGridLayout()
         tpmsLayout.setContentsMargins(0, 0, 0, 0)
-        tpmsLayout.setSpacing(5)
+        tpmsLayout.setSpacing(2) # TPMS内の十字線
 
         tpmsLayout.addWidget(self.tpms_fl, 0, 0)
         tpmsLayout.addWidget(self.tpms_fr, 0, 1)
@@ -251,24 +298,33 @@ class DashboardWidget(QWidget):
         tpmsGridGroup.setLayout(tpmsLayout)
 
         mainLayout = QGridLayout()
-        mainLayout.setContentsMargins(5, 5, 5, 5)
-        mainLayout.setSpacing(5)
+        # ★修正: RightBox全体のグリッド線設定
+        mainLayout.setContentsMargins(2, 2, 2, 2)
+        mainLayout.setSpacing(2)
 
         mainLayout.addWidget(self.opsBar, 0, 0)
 
+        # コンテナの背景を白にして、その中に黒いボックスを配置
+        lapInfoContainer = QWidget()
+        lapInfoContainer.setObjectName("LapInfoContainer")
+        lapInfoContainer.setStyleSheet("QWidget#LapInfoContainer { background-color: #FFF; }") 
+        lapInfoContainer.setAttribute(QtCore.Qt.WA_StyledBackground, True) # 確実に背景を描画させる
+        
         lapInfoLayout = QGridLayout()
+        lapInfoLayout.setContentsMargins(0, 0, 0, 0)
+        lapInfoLayout.setSpacing(2)
+        
         lapInfoLayout.addWidget(self.lapCountBox, 0, 0)
         lapInfoLayout.addWidget(self.deltaBox, 0, 1)
-
-        mainLayout.addLayout(lapInfoLayout, 1, 0)
+        
+        lapInfoContainer.setLayout(lapInfoLayout)
+        
+        mainLayout.addWidget(lapInfoContainer, 1, 0)
         mainLayout.addWidget(tpmsGridGroup, 2, 0)
         
-        mainLayout.addWidget(self.goproLabel, 3, 0)
-
         mainLayout.setRowStretch(0, 1)
         mainLayout.setRowStretch(1, 2)
         mainLayout.setRowStretch(2, 6)
-        mainLayout.setRowStretch(3, 2)
 
         self.rightGroupBox.setLayout(mainLayout)
 

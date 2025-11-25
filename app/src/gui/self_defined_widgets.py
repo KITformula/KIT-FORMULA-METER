@@ -57,39 +57,45 @@ class QCustomLabel(QLabel):
 class TitleValueBox(QGroupBox):
     def __init__(self, titleLabel):
         super(TitleValueBox, self).__init__(None)
+        self.setAttribute(QtCore.Qt.WA_StyledBackground, True)
+        self.setAutoFillBackground(True)
         self.setFlat(True)
         self.layout = QGridLayout()
         self.setObjectName("TitleValueBox")
+        
+        # ボックス自体の背景を黒に
         self.setStyleSheet(
-            "QGroupBox#TitleValueBox { border: 2px solid #ffffff; border-radius: 3px;}"
+            "QGroupBox#TitleValueBox { border: none; background-color: #000; border-radius: 0px; margin: 0px; }"
         )
-        self.TitleFont = "Monospaced Font"
+        
+        # ★修正: 写真のような太めのサンセリフ体（DejaVu Sans）に統一
+        self.TitleFont = "DejaVu Sans" 
         self.titleColor = "#FD6"
-        self.valueFont = "Monospaced Font"
+        self.valueFont = "DejaVu Sans"  # Monoを削除
         self.valueColor = "#FFF"
         self.titleBackgroundColor = "#000"
 
         self.titleLabel = QCustomLabel()
         self.titleLabel.setText(titleLabel)
-        # self.titleLabel.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignBottom)
         self.titleLabel.setFontFamily(self.TitleFont)
         self.titleLabel.setFontScale(0.55)
+        # ラベル自体にも背景黒を指定して透過を防ぐ
         self.titleLabel.setStyleSheet(
             "color :"
             + self.titleColor
             + "; background-color:"
             + self.titleBackgroundColor
-            + ";font-weight: bold"
+            + ";font-weight: bold;"
         )
 
         self.valueLabel = QCustomLabel()
         self.valueLabel.setAlignment(QtCore.Qt.AlignCenter)
         self.valueLabel.setFontFamily(self.valueFont)
         self.valueLabel.setFontScale(0.75)
+        # ラベル自体にも背景黒を指定して透過を防ぐ
         self.valueLabel.setStyleSheet(
-            "font-weight: bold; color :" + self.valueColor + ";"
+            "font-weight: bold; color :" + self.valueColor + "; background-color: #000;"
         )
-        # self.setStyleSheet("color : #FFF; background-color: #000;")
 
         self.layout.addWidget(self.titleLabel, 0, 0)
         self.layout.addWidget(self.valueLabel, 1, 0)
@@ -112,14 +118,12 @@ class TitleValueBox(QGroupBox):
 
     def updateTempValueLabel(self, waterTemp: WaterTemp):
         """
-        WaterTempオブジェクトを受け取り、'℃'を付けて表示する専用メソッド
+        WaterTempオブジェクトを受け取り、数値を表示する専用メソッド
         """
-        # hasattrで、渡されたオブジェクトが'value'属性を持つか安全にチェック
         if hasattr(waterTemp, "value"):
-            display_text = f"{waterTemp.value:.0f} ℃"
+            display_text = f"{waterTemp.value:.0f}"
         else:
-            # もし単なる数値が渡された場合にも対応
-            display_text = f"{int(waterTemp):.0f} ℃"
+            display_text = f"{int(waterTemp):.0f}"
 
         self.valueLabel.setText(display_text)
 
@@ -133,10 +137,10 @@ class TitleValueBox(QGroupBox):
             color = "#FB0"
         elif waterTemp.status == WaterTempStatus.HIGH:
             color = "#F00"
+        
+        # 背景色が変わる場合でも、他のスタイル（配置など）を維持する
         self.valueLabel.setStyleSheet(
-            "font-weight: bold; border-radius: 5px; color: #FFF; background-color:"
-            + color
-            + ";"
+            f"font-weight: bold; border-radius: 5px; color: #FFF; qproperty-alignment: 'AlignCenter'; background-color: {color};"
         )
 
     def updateOilTempWarning(self, oilTemp: OilTemp):
@@ -146,140 +150,99 @@ class TitleValueBox(QGroupBox):
             color = "#FB0"
         elif oilTemp.status == OilTempStatus.HIGH:
             color = "#F00"
+        
         self.valueLabel.setStyleSheet(
-            "font-weight: bold; border-radius: 5px; color: #FFF; background-color:"
-            + color
-            + ";"
+            f"font-weight: bold; border-radius: 5px; color: #FFF; qproperty-alignment: 'AlignCenter'; background-color: {color};"
         )
-
-    # def updateOilPressWarning(self, oilPress: OilPress):
-    #     # self.valueLabel.setText(str(round(oilPress, 2)))
-    #     if oilPress.status == OilPressStatus.LOW:
-    #         color = "#F00"
-    #     elif oilPress.status == OilPressStatus.MIDDLE:
-    #         color = "#FB0"
-    #     elif oilPress.status == OilPressStatus.HIGH:
-    #         color = "#000"
-    #     self.valueLabel.setStyleSheet(
-    #         "font-weight: bold; border-radius: 5px; color: #FFF; background-color:"
-    #         + color
-    #         + ";"
-    #     )
 
     def updateFanWarning(self, fanEnable: bool):
         if fanEnable:
             color = "#000"
         else:
             color = "#F00"
+        
         self.valueLabel.setStyleSheet(
-            "font-weight: bold; border-radius: 5px; color: #FFF; background-color:"
-            + color
-            + ";"
+            f"font-weight: bold; border-radius: 5px; color: #FFF; background-color: {color};"
         )
 
 
 class IconValueBox(QGroupBox):
     def __init__(self, iconPath=None):
         super(IconValueBox, self).__init__(None)
+        self.setAttribute(QtCore.Qt.WA_StyledBackground, True)
+        self.setAutoFillBackground(True)
         self.setFlat(True)
 
-        self.valueFont = QFont("Monospaced Font", 18)
+        # ★修正: 写真のような太めのサンセリフ体（DejaVu Sans）に統一
+        self.valueFont = QFont("DejaVu Sans", 18, QFont.Bold) # Monoを削除
         self.valueColor = "#FFF"
         self.layout = QGridLayout()
+        
+        self.setObjectName("IconValueBox")
+        self.setStyleSheet("QGroupBox#IconValueBox { border: none; background-color: #000; margin: 0px; }")
 
         self.valueLabel = QCustomLabel()
         self.valueLabel.setAlignment(QtCore.Qt.AlignCenter)
         self.valueLabel.setFontScale(0.75)
-        self.valueLabel.setFontFamily("Monospaced Font")
-        self.valueLabel.setStyleSheet("QLabel { color : " + self.valueColor + "; }")
+        self.valueLabel.setFontFamily("DejaVu Sans") # Monoを削除
+        # ここでも背景黒を明示
+        self.valueLabel.setStyleSheet("QLabel { color : " + self.valueColor + "; background-color: #000; font-weight: bold; }")
 
-        # iconPathが指定されている（Noneではない）場合
         if iconPath:
             self.iconLabel = QLabel(self)
             self.iconLabel.setPixmap(QPixmap(iconPath))
             self.iconLabel.setAlignment(QtCore.Qt.AlignCenter)
+            self.iconLabel.setStyleSheet("background-color: #000;") # アイコン背景も黒
 
             self.layout.addWidget(self.iconLabel, 0, 0)
-            self.layout.addWidget(self.valueLabel, 0, 1)  # valueLabelは既に作成済み
+            self.layout.addWidget(self.valueLabel, 0, 1)
             self.layout.setColumnStretch(0, 1)
             self.layout.setColumnStretch(1, 3)
-        # iconPathが指定されていない（Noneの）場合
         else:
-            # アイコンラベルは作成せず、valueLabelが全幅を使う
             self.layout.addWidget(
                 self.valueLabel, 0, 0, 1, 2
-            )  # valueLabelは既に作成済み
+            )
 
         self.layout.setContentsMargins(0, 0, 0, 0)
         self.layout.setSpacing(0)
         self.setLayout(self.layout)
 
     def updateBatteryValueLabel(self, batteryVoltage: BatteryVoltage):
-        """
-        電圧値を受け取り、テキストの表示と色の警告を一度に行う
-        """
-        # "BAT " の後ろに半角スペースを入れる
         display_text = f" {batteryVoltage:.1f} V"
-
-        # --- 2. 色の決定 ---
-        # 次に、渡された電圧値に基づいて使用する色を決定します
-        color_to_set = "#7fff00"  # デフォルトは緑色
+        color_to_set = "#7fff00"
 
         if batteryVoltage < 13.0:
-            color_to_set = "#E53E3E"  # 13.0未満は赤
+            color_to_set = "#E53E3E"
         elif batteryVoltage <= 13.4:
-            color_to_set = "#ECC94B"  # 13.0以上13.1以下は黄
+            color_to_set = "#ECC94B"
 
-        # --- 3. スタイル（色）とテキストを適用 ---
-        # 決定した色で、valueLabelの文字色（color）を更新します
-        # 注意: フォント設定なども含めて再指定しないと、スタイルがリセットされる可能性があります
-        self.valueLabel.setStyleSheet(f"font-weight: bold; color: {color_to_set};")
-
-        # 4. テキストを設定
+        self.valueLabel.setStyleSheet(f"font-weight: bold; color: {color_to_set}; background-color: #000;")
         self.valueLabel.setText(display_text)
 
     def updateFuelPressValueLabel(self, fuelPress: FuelPress):
-        """
-        FuelPressオブジェクトを受け取り、'kPa'を付けて表示し、
-        圧力に応じて背景色を変更する専用メソッド
-        """
-        # --- 1. テキストの整形 ---
-        # floatを継承しているので、そのままフォーマットできる
         display_text = f"{fuelPress:.1f} kPa"
         new_color = "#7fff00"
 
         if fuelPress < 28.0:
-            new_color = "#E53E3E"  # 28.0未満は赤
+            new_color = "#E53E3E"
         else:
-            new_color = "#7fff00"  # 28.0以上は緑
-        self.valueLabel.setStyleSheet(f"font-weight: bold; color: {new_color};")
-
-        # 4. テキストを設定
+            new_color = "#7fff00"
+        self.valueLabel.setStyleSheet(f"font-weight: bold; color: {new_color}; background-color: #000;")
         self.valueLabel.setText(display_text)
 
     def updateFuelPercentLabel(self, fuel_percentage: float):
-        """
-        燃料残量パーセンテージを受け取り、'%'を付けて表示し、
-        残量に応じて文字色を変更する専用メソッド
-        """
-        # --- 1. テキストの整形 ---
         display_text = f"{fuel_percentage:.1f} %"
-
-        # --- 2. 色の決定 ---
-        new_color = "#7fff00"  # デフォルト（緑）
+        new_color = "#7fff00"
 
         if fuel_percentage < 20.0:
-            new_color = "#E53E3E"  # 20.0%未満は赤
+            new_color = "#E53E3E"
         elif fuel_percentage < 50.0:
-            new_color = (
-                "#ECC94B"  # 20.0%以上50.0%未満は黄 (バッテリー警告などで使われる黄色)
-            )
+            new_color = "#ECC94B"
         else:
-            new_color = "#7fff00"  # 50.0%以上は緑
+            new_color = "#7fff00"
 
-        # --- 3. スタイル（色）とテキストを適用 ---
         self.valueLabel.setStyleSheet(
-            f"font-weight: bold; color: {new_color}; qproperty-alignment: 'AlignCenter';"
+            f"font-weight: bold; color: {new_color}; qproperty-alignment: 'AlignCenter'; background-color: #000;"
         )
         self.valueLabel.setText(display_text)
 
@@ -295,28 +258,15 @@ class PedalBar(QProgressBar):
     def __init__(self, barColor, maxValue):
         super(PedalBar, self).__init__(None)
         self.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
-        # self.adjustSize()
-        # self.setMaximum(Rpm.MAX)
         self.setMaximum(maxValue)
-        # self.setValue(40)
         self.setTextVisible(False)
         self.setOrientation(QtCore.Qt.Horizontal)
-        # self.setStyleSheet(
-        #     """
-        #     QProgressBar
-        #         {
-        #             border: 2px solid;
-        #             border-color: #AAA;
-        #             border-radius: 5px;
-        #             background-color: #333;
-        #         }
-        #     """
-        # )
+        
         self.setStyleSheet(
             """
             QProgressBar
                 {
-                    border: 2px solid;
+                    border: 1px solid;
                     border-color: #ffffff;
                     border-radius: 5px;
                     background-color: #333;
@@ -337,24 +287,12 @@ class PedalBar(QProgressBar):
 class RpmLightBar(QGroupBox):
     def __init__(self):
         super(RpmLightBar, self).__init__(None)
+        self.setAttribute(QtCore.Qt.WA_StyledBackground, True)
+        self.setAutoFillBackground(True)
         self.setFlat(True)
-        self.setStyleSheet("border:0;")
+        self.setStyleSheet("border:0; background-color: #000;")
 
         self.layout = QGridLayout()
-
-        # # shift point 8500
-        # self.lightRpm_1 = 1000
-        # self.lightRpm_2 = 2000
-        # self.lightRpm_3 = 3000
-        # self.lightRpm_4 = 4000
-        # self.lightRpm_5 = 4500
-        # self.lightRpm_6 = 5000
-        # self.lightRpm_7 = 5500
-        # self.lightRpm_8 = 6000
-        # self.lightRpm_9 = 6500
-        # self.lightRpm_10 = 7000
-        # self.lightRpm_11 = 7500
-        # self.lightRpm_12 = 8000
 
         # shift point 9000
         self.lightRpm_1 = 1000
@@ -410,9 +348,6 @@ class RpmLightBar(QGroupBox):
         self.layout.addWidget(self.light_14, 0, 13)
         self.layout.addWidget(self.light_15, 0, 14)
 
-        # self.layout.setContentsMargins(0, 0, 0, 0)
-        # self.layout.setSpacing(0)
-
         self.setLayout(self.layout)
 
     def updateRpmBar(self, rpm: Rpm):
@@ -436,13 +371,14 @@ class RpmLightBar(QGroupBox):
 class RpmLight(QGroupBox):
     def __init__(self, onRpm, onColor):
         super(RpmLight, self).__init__(None)
+        self.setAttribute(QtCore.Qt.WA_StyledBackground, True)
+        self.setAutoFillBackground(True)
         self.setFlat(True)
         self.setStyleSheet("border:0;")
-        # self.setFixedSize(51, 40)
 
         self.offColor = "#333"  # dark gray
         self.shiftRpm = 12300
-        self.shiftColor = "#ffff00"  # yellow
+        self.shiftColor = "#ffff00"
 
         self.onRpm = onRpm
         self.onColor = onColor
@@ -461,24 +397,24 @@ class GearLabel(QCustomLabel):
     def __init__(self):
         super(GearLabel, self).__init__()
         self.setAlignment(QtCore.Qt.AlignCenter)
-        self.setFontFamily("Monospaced Font")
-        self.setFontScale(3.0)
-        self.setStyleSheet("color : #FFF; background-color: #000")
+        self.setFontFamily("DejaVu Sans") # ★修正: 太字ゴシック
+        self.setFontScale(2.5)
+        self.setStyleSheet("color : #FFF; background-color: #000; font-weight: bold;")
 
     def updateGearLabel(self, gearType: GearType):
         if int(gearType) == GearType.NEUTRAL:
             self.setText("N")
-            self.setStyleSheet("font-weight: bold; color : #00ff7f;")
+            self.setStyleSheet("font-weight: bold; color : #00ff7f; background-color: #000;")
         else:
             self.setText(str(int(gearType)))
-            self.setStyleSheet("font-weight: bold; color : #FFF;")
+            self.setStyleSheet("font-weight: bold; color : #FFF; background-color: #000;")
 
 
 class RpmLabel(QCustomLabel):
     def __init__(self):
         super(RpmLabel, self).__init__()
         self.setAlignment(QtCore.Qt.AlignCenter)
-        self.setFontFamily("Monospaced Font")
+        self.setFontFamily("DejaVu Sans") # ★修正: 太字ゴシック
         self.setFontScale(0.8)
         self.setStyleSheet("font-weight: bold; color : #FFF; background-color: #000")
 
@@ -491,7 +427,7 @@ class LapTimerLabel(QCustomLabel):
         super(LapTimerLabel, self).__init__()
 
         self.setAlignment(QtCore.Qt.AlignCenter)
-        self.setFontFamily("Monospaced Font")
+        self.setFontFamily("DejaVu Sans") # ★修正: 太字ゴシック
         self.setFontScale(0.8)
         self.setStyleSheet("color : #ffffff; background-color: #000")
 
@@ -507,53 +443,53 @@ class TpmsBox(QGroupBox):
 
     def __init__(self, title: str):
         super(TpmsBox, self).__init__(title)
+        
+        self.setAttribute(QtCore.Qt.WA_StyledBackground, True)
+        self.setAutoFillBackground(True)
 
-        # --- スタイル定義 ---
-        # ★ 1. フォントファミリーに "Monospace" を指定
-        # ★ 2. フォントサイズをさらに大きく調整 (例: 40px, 32px)
+        # ★修正: 写真のような太めのサンセリフ体（DejaVu Sans）に統一
         self.temp_style_base = (
-            "font-family: 'Monospace'; font-size: 40px; font-weight: bold;"
+            "font-family: 'DejaVu Sans'; font-size: 70px; font-weight: bold;"
         )
         self.pressure_style_base = (
-            "font-family: 'Monospace'; font-size: 20px; font-weight: bold;"
+            "font-family: 'DejaVu Sans'; font-size: 20px; font-weight: bold;"
         )
 
         self.color_ok = "color: #FFF;"
         self.color_no_data = "color: #888;"
 
-        # --- ウィジェットの作成 ---
+        self.setObjectName("TpmsBox")
+        self.setStyleSheet("QGroupBox#TpmsBox { border: none; background-color: #000; margin: 0px; }")
 
-        # 1. 気温表示用のラベル
+        # 1. 気温表示用のラベル (背景黒を追加)
         self.tempLabel = QLabel("---")
         self.tempLabel.setAlignment(QtCore.Qt.AlignCenter)
-        self.tempLabel.setStyleSheet(f"{self.temp_style_base} {self.color_no_data}")
+        self.tempLabel.setStyleSheet(f"{self.temp_style_base} {self.color_no_data} background-color: #000;")
 
-        # 2. 気圧表示用のラベル
+        # 2. 気圧表示用のラベル (背景黒を追加)
         self.pressureLabel = QLabel("---")
         self.pressureLabel.setAlignment(QtCore.Qt.AlignCenter)
         self.pressureLabel.setStyleSheet(
-            f"{self.pressure_style_base} {self.color_no_data}"
+            f"{self.pressure_style_base} {self.color_no_data} background-color: #000;"
         )
 
         # 3. 真ん中の横線
         self.line = QFrame()
-        self.line.setFrameShape(QFrame.HLine)  # 水平線
+        self.line.setFrameShape(QFrame.HLine)
         self.line.setFrameShadow(QFrame.Sunken)
         self.line.setStyleSheet("background-color: #555;")
 
-        # --- レイアウトの構築 ---
         layout = QGridLayout()
-        layout.setContentsMargins(5, 5, 5, 5)  # 内側の余白
-        layout.setSpacing(0)  # ウィジェット間の隙間をゼロに
+        layout.setContentsMargins(5, 5, 5, 5)
+        layout.setSpacing(0)
 
-        layout.addWidget(self.tempLabel, 0, 0)  # 1段目: 気温
-        layout.addWidget(self.line, 1, 0)  # 2段目: 横線
-        layout.addWidget(self.pressureLabel, 2, 0)  # 3段目: 気圧
+        layout.addWidget(self.tempLabel, 0, 0)
+        layout.addWidget(self.line, 1, 0)
+        layout.addWidget(self.pressureLabel, 2, 0)
 
-        # ★ 3. 縦の比率を「温度 3 : 線 0 : 気圧 1」に（変更なし）
-        layout.setRowStretch(0, 3)  # 温度
-        layout.setRowStretch(1, 0)  # 線 (最小)
-        layout.setRowStretch(2, 1)  # 気圧
+        layout.setRowStretch(0, 3)
+        layout.setRowStretch(1, 0)
+        layout.setRowStretch(2, 1)
 
         self.setLayout(layout)
 
@@ -561,22 +497,31 @@ class TpmsBox(QGroupBox):
         """気温ラベルを更新する"""
         if temp_c is None:
             self.tempLabel.setText("---")
-            self.tempLabel.setStyleSheet(f"{self.temp_style_base} {self.color_no_data}")
+            self.tempLabel.setStyleSheet(f"{self.temp_style_base} {self.color_no_data} background-color: #000;")
         else:
-            self.tempLabel.setText(f"{temp_c:.1f}C")
-            # (閾値に応じて色を変えるロジックもここに追加できる)
-            self.tempLabel.setStyleSheet(f"{self.temp_style_base} {self.color_ok}")
+            val = int(temp_c)
+            self.tempLabel.setText(f"{val}")
+            
+            if val < 30:
+                color = "#00BFFF"
+            elif val < 40:
+                color = "#FFFF00"
+            elif val < 50:
+                color = "#FFA500"
+            else:
+                color = "#FF0000"
+
+            self.tempLabel.setStyleSheet(f"{self.temp_style_base} color: {color}; background-color: #000;")
 
     def updatePressure(self, pressure_kpa: float | None):
         """気圧ラベルを更新する"""
         if pressure_kpa is None:
             self.pressureLabel.setText("---")
             self.pressureLabel.setStyleSheet(
-                f"{self.pressure_style_base} {self.color_no_data}"
+                f"{self.pressure_style_base} {self.color_no_data} background-color: #000;"
             )
         else:
             self.pressureLabel.setText(f"{pressure_kpa:.0f} kPa")
-            # (閾値に応じて色を変えるロジックもここに追加できる)
             self.pressureLabel.setStyleSheet(
-                f"{self.pressure_style_base} {self.color_ok}"
+                f"{self.pressure_style_base} {self.color_ok} background-color: #000;"
             )
