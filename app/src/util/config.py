@@ -34,7 +34,7 @@ TPMS_ID_MAP = {"a61b44e3": "FR", "64f3850c": "FL", "766b4951": "RR", "74f4be1b":
 # --- GPS設定 (Lap Timer用) ---
 GPS_PORT = os.environ.get("GPS_PORT", "/dev/ttyACM0")
 GPS_BAUD = int(os.environ.get("GPS_BAUD", 115200))
-GPS_LAP_RADIUS_METERS = float(os.environ.get("GPS_LAP_RADIUS_METERS", 5.0))
+GPS_LAP_RADIUS_METERS = float(os.environ.get("GPS_LAP_RADIUS_METERS", 3.0))
 GPS_LAP_COOLDOWN_SEC = float(os.environ.get("GPS_LAP_COOLDOWN_SEC", 10.0))
 
 # --- MQTT リアルタイム テレメトリ設定 (シンプル化) ---

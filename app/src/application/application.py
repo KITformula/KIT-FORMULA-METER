@@ -1,13 +1,12 @@
 import logging
-import random
 import sys
 import threading
-import time
 
 from PyQt5.QtCore import QObject, QTimer, pyqtSlot, Qt
 from PyQt5.QtWidgets import QApplication
 
 from src.fuel.fuel_calculator import FuelCalculator
+from src.race.lap_timer import LapTimer
 from src.gui.gui import MainDisplayWindow, WindowListener
 from src.gui.splash_screen import SplashScreen
 from src.machine.machine import Machine
@@ -25,14 +24,11 @@ from src.gopro.gopro_worker import GoProWorker
 logger = logging.getLogger(__name__)
 
 if not config.debug:
-    from src.gps.gps_worker import GpsWorker, calculate_distance_meters
+    from src.gps.gps_worker import GpsWorker
 else:
     class GpsWorker:
         pass
 
-    def calculate_distance_meters(a, b, c, d):
-        return 0
-    
 class AppWindowListener(WindowListener):
     def __init__(self, app_instance):
         self.app = app_instance
@@ -55,6 +51,10 @@ class Application(QObject, WindowListener):
             tank_capacity_ml=self.tank_capacity_ml,
             current_remaining_ml=current_start_ml,
         )
+        
+        # ラップタイマー
+        self.lap_timer = LapTimer()
+        
         self.machine = Machine(self.fuel_calculator)
 
         self.csv_logger = CsvLogger(base_dir="logs")
@@ -70,24 +70,15 @@ class Application(QObject, WindowListener):
         self.gps_worker: GpsWorker | None = None
         self.gps_thread: threading.Thread | None = None
 
-        # ★ GoPro Worker
         self.gopro_worker = GoProWorker()
 
-        self.lap_count = 0
-        self.previous_lap_time = 0.0
-        self.lap_target_coords = None
-        self.last_lap_time = time.monotonic()
-        self.is_outside_lap_zone = True
         self.current_gps_data = {}
-
+        
         # LSDの現在のレベルを保持
         self.current_lsd_level = 1
 
         if config.debug:
             print("★ GPSワーカーはモックモードで起動します ★")
-            self.mock_lap_time_elapsed = 0.0
-            self.mock_lap_duration = 10.0
-            self.mock_best_lap = 60.0
         else:
             print("★ GPSワーカーは本番モードで起動します ★")
             self.gps_port = getattr(config, "GPS_PORT", "COM6")
@@ -143,7 +134,6 @@ class Application(QObject, WindowListener):
         if self.encoder_worker:
             self.encoder_worker.stop()
             
-        # ★ GoPro切断
         if self.gopro_worker:
             self.gopro_worker.stop()
 
@@ -153,27 +143,20 @@ class Application(QObject, WindowListener):
 
         self.window = MainDisplayWindow(self)
         
-        # --- シグナル接続 (基本) ---
         self.window.requestSetStartLine.connect(self.set_start_line)
         self.window.requestResetFuel.connect(self.reset_fuel_integrator)
         self.window.requestLapTimeSetup.connect(self.setup_lap_time)
-
-        # --- LSD変更シグナルを接続 ---
         self.window.requestLsdChange.connect(self.change_lsd_level)
         
-        # --- ★ GoPro関連の接続 (新規画面からの操作) ---
         self.window.requestGoProConnect.connect(self.gopro_worker.start_connection)
         self.window.requestGoProDisconnect.connect(self.gopro_worker.stop)
         self.window.requestGoProRecStart.connect(self.gopro_worker.send_command_record_start)
         self.window.requestGoProRecStop.connect(self.gopro_worker.send_command_record_stop)
         
-        # GoProからのステータス通知をGUIへ
         self.gopro_worker.status_changed.connect(
             self.window.updateGoProStatus, 
             type=Qt.QueuedConnection
         )
-        
-        # GoProからのバッテリー通知をGUIへ
         self.gopro_worker.battery_changed.connect(
             self.window.updateGoProBattery,
             type=Qt.QueuedConnection
@@ -195,8 +178,6 @@ class Application(QObject, WindowListener):
 
         self.splash.start_fade_out()
 
-    # --- 機能の実装 ---
-
     @pyqtSlot()
     def reset_fuel_integrator(self):
         print("★ Fuel Integrator Reset Requested")
@@ -210,38 +191,16 @@ class Application(QObject, WindowListener):
 
     @pyqtSlot()
     def set_start_line(self):
+        # LapTimerクラスに処理を委譲
         if config.debug:
-            print("MOCK: スタートライン設定をスキップ (スペースキー無効)")
-            self.lap_count = 0
-            self.previous_lap_time = 0.0
-            self.mock_lap_time_elapsed = 0.0
-            if self.machine:
-                info = self.machine.canMaster.dashMachineInfo
-                info.lapCount = 0
-                info.lapTimeDiff = 0.0
-                info.currentLapTime = 0.0
+            print("MOCK: スタートライン設定 (デバッグモード)")
+            self.lap_timer.reset_state(self.machine.canMaster.dashMachineInfo)
             return
 
         lat = self.current_gps_data.get("latitude", 0.0)
         lon = self.current_gps_data.get("longitude", 0.0)
-
-        if lat != 0.0 and lon != 0.0:
-            self.lap_target_coords = (lat, lon)
-            self.lap_count = 0
-            self.last_lap_time = time.monotonic()
-            self.previous_lap_time = 0.0
-            
-            # ★修正: 現在スタートライン上にいるため、ゾーン内フラグをFalse(内側)にする
-            self.is_outside_lap_zone = False
-
-            info = self.machine.canMaster.dashMachineInfo
-            info.lapCount = 0
-            info.lapTimeDiff = 0.0
-            info.currentLapTime = 0.0
-            print(f"★ スタートライン設定: {lat}, {lon}")
-        else:
-            print("★ GPS測位が無効なため、スタートラインを設定できません。")
-
+        
+        self.lap_timer.set_start_line(lat, lon, self.machine.canMaster.dashMachineInfo)
 
     @pyqtSlot(dict)
     def on_tpms_update(self, data: dict):
@@ -252,9 +211,12 @@ class Application(QObject, WindowListener):
         if config.debug:
             return
         self.current_gps_data = data
+        
         if hasattr(self.machine.canMaster.dashMachineInfo, "gpsQuality"):
             self.machine.canMaster.dashMachineInfo.gpsQuality = data.get("quality", 0)
-        self.check_lap_crossing(data)
+            
+        # LapTimerに更新を依頼
+        self.lap_timer.update(data, self.machine.canMaster.dashMachineInfo)
 
     def show_main_window(self):
         if self.window:
@@ -270,13 +232,14 @@ class Application(QObject, WindowListener):
         dash_info = self.machine.canMaster.dashMachineInfo
         fuel_percentage = self.fuel_calculator.remaining_fuel_percent
 
+        # ★ デバッグ時はモック更新をLapTimerに依頼
+        # 本番時は on_gps_update で LapTimer が更新されるため、ここでは何もしない
         if config.debug:
-            self.update_mock_gps_lap(dash_info)
-        else:
-            if hasattr(dash_info, "currentLapTime") and self.last_lap_time:
-                current_lap_duration = time.monotonic() - self.last_lap_time
-                dash_info.currentLapTime = current_lap_duration
+            self.lap_timer.update_mock(dash_info)
             
+        # ★以前ここに存在した「else: currentLapTime = ...」というコードを削除済み
+        # これにより、勝手にタイマーが進むことがなくなります。
+
         current_rpm = int(dash_info.rpm)
         
         if current_rpm >= 500:
@@ -315,7 +278,6 @@ class Application(QObject, WindowListener):
             )
 
         if self.window is not None:
-            # ★ ここを修正: current_gps_data を 4つ目の引数として渡す
             self.window.updateDashboard(
                 dash_info,
                 fuel_percentage,
@@ -328,80 +290,7 @@ class Application(QObject, WindowListener):
         current_ml = self.fuel_calculator.remaining_fuel_ml
         self.fuel_store.save_state(current_ml)
 
-    def update_mock_gps_lap(self, dash_info):
-        self.mock_lap_time_elapsed += 0.050
-        dash_info.currentLapTime = self.mock_lap_time_elapsed
-
-        if self.mock_lap_time_elapsed >= self.mock_lap_duration:
-            self.lap_count += 1
-            dash_info.lapCount = self.lap_count
-            lap_time = self.mock_lap_duration + random.uniform(-2.0, 2.0)
-
-            if self.lap_count > 1:
-                delta = lap_time - self.previous_lap_time
-            else:
-                delta = 0.0
-
-            dash_info.lapTimeDiff = delta
-            dash_info.currentLapTime = lap_time
-            self.previous_lap_time = lap_time
-            self.mock_lap_time_elapsed = 0.0
-            print(f"MOCK LAP {self.lap_count}: {lap_time:.2f}s (Diff: {delta:+.2f}s)")
-            self.mock_lap_duration = self.mock_best_lap + random.uniform(-3.0, 3.0)
-
-    def check_lap_crossing(self, current_data: dict):
-        if self.lap_target_coords is None:
-            return
-        if config.debug:
-            return
-
-        lat = current_data.get("latitude", 0.0)
-        lon = current_data.get("longitude", 0.0)
-        quality = current_data.get("quality", 0)
-        status = current_data.get("status", "V")
-
-        is_valid_fix = (quality > 0 or status == "A") and (lat != 0.0 or lon != 0.0)
-        if not is_valid_fix:
-            return
-
-        target_lat, target_lon = self.lap_target_coords
-        distance = calculate_distance_meters(target_lat, target_lon, lat, lon)
-        current_time = time.monotonic()
-
-        lap_radius = getattr(config, "GPS_LAP_RADIUS_METERS", 5.0)
-        lap_cooldown = getattr(config, "GPS_LAP_COOLDOWN_SEC", 10.0)
-
-        if distance <= lap_radius:
-            time_since_last_lap = current_time - self.last_lap_time
-            if self.is_outside_lap_zone and (time_since_last_lap > lap_cooldown):
-                info = self.machine.canMaster.dashMachineInfo
-                if self.lap_count > 0:
-                    info.lapTimeDiff = time_since_last_lap - self.previous_lap_time
-                else:
-                    info.lapTimeDiff = 0.0
-                self.previous_lap_time = time_since_last_lap
-                self.lap_count += 1
-                info.lapCount = self.lap_count
-                self.last_lap_time = current_time
-                self.is_outside_lap_zone = False
-                print(
-                    f"LAP {self.lap_count}: {time_since_last_lap:.2f}s (Diff: {info.lapTimeDiff:+.2f}s)"
-                )
-        else:
-            self.is_outside_lap_zone = True
-
-            
     @pyqtSlot(int)
     def change_lsd_level(self, level: int):
-        """
-        GUIでLSDのレベルが変更されたときに呼ばれるスロット
-        ここで車体のモーター制御などを行う
-        """
         print(f"★ LSD Level Changed to: {level}")
         self.current_lsd_level = level
-
-        # TODO: ここに実際のハードウェア制御コードを記述する
-        # 例: CANバス経由でモータードライバーに指令を送る、あるいはGPIO/PWM制御など
-        # if not config.debug:
-        #     # 例: self.motor_controller.set_level(level)
-        #     pass
