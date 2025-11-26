@@ -16,6 +16,7 @@ from PyQt5.QtWidgets import (
 )
 
 from src.gui.self_defined_widgets import (
+    DeltaBox,  # ★追加: 新しいウィジェットをインポート
     GearLabel,
     IconValueBox,
     PedalBar,
@@ -140,9 +141,9 @@ class DashboardWidget(QWidget):
         
         self.lapCountBox.updateValueLabel(dashMachineInfo.lapCount)
 
-        diff = dashMachineInfo.lapTimeDiff
-        sign = "+" if diff > 0 else ""
-        self.deltaBox.updateValueLabel(f"{sign}{diff:.2f}")
+        # ★★★ 修正: デルタタイムの更新を専用ウィジェットに任せる (SOLID: SRP) ★★★
+        # 色分けロジックは DeltaBox 側に移譲
+        self.deltaBox.updateDelta(dashMachineInfo.lapTimeDiff)
 
         fl_data = tpms_data.get("FL", {})
         self.tpms_fl.updateTemperature(fl_data.get("temp_c"))
@@ -202,7 +203,9 @@ class DashboardWidget(QWidget):
         self.lapTimeBox.valueLabel.setFontScale(0.55)
 
         self.lapCountBox = TitleValueBox("Lap")
-        self.deltaBox = TitleValueBox("Delta")
+        
+        # ★修正: DeltaBox を使用するように変更
+        self.deltaBox = DeltaBox("Delta")
         
         self.goproLabel = TitleValueBox("GoPro Bat")
 

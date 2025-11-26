@@ -166,6 +166,41 @@ class TitleValueBox(QGroupBox):
         )
 
 
+# ★★★ 追加: デルタタイム専用の表示ボックス (SOLID原則: 単一責任の原則) ★★★
+class DeltaBox(TitleValueBox):
+    """
+    ラップタイムの差分（デルタ）を表示するための専用ウィジェット。
+    GUIクラスから色分けロジックを分離し、自身の表示責任を持つ。
+    """
+    def __init__(self, titleLabel="Delta"):
+        super(DeltaBox, self).__init__(titleLabel)
+
+    def updateDelta(self, diff: float):
+        """
+        差分値を受け取り、フォーマットと色を更新する
+        Args:
+            diff (float): ラップタイム差分 (秒)
+        """
+        # 1. 符号付きでフォーマット (+0.00, -0.00)
+        self.valueLabel.setText(f"{diff:+.2f}")
+
+        # 2. 値に応じた色の決定
+        if diff < 0:
+            # マイナス（速い） -> 緑
+            color = "#0F0"
+        elif diff > 0:
+            # プラス（遅い） -> 赤
+            color = "#F00"
+        else:
+            # ゼロ -> 白
+            color = "#FFF"
+
+        # 3. スタイルの適用 (背景黒を維持)
+        self.valueLabel.setStyleSheet(
+            f"font-weight: bold; color: {color}; background-color: #000;"
+        )
+
+
 class IconValueBox(QGroupBox):
     def __init__(self, iconPath=None):
         super(IconValueBox, self).__init__(None)
@@ -208,7 +243,7 @@ class IconValueBox(QGroupBox):
         self.setLayout(self.layout)
 
     def updateBatteryValueLabel(self, batteryVoltage: BatteryVoltage):
-        display_text = f" {batteryVoltage:.1f}V"
+        display_text = f" {batteryVoltage:.1f} V"
         color_to_set = "#7fff00"
 
         if batteryVoltage < 13.0:
@@ -231,6 +266,7 @@ class IconValueBox(QGroupBox):
         self.valueLabel.setText(display_text)
 
     def updateFuelPercentLabel(self, fuel_percentage: float):
+        # ★修正: floatの小数点以下を表示せず、intに変換して整数表示にする
         display_text = f"{int(fuel_percentage)} %"
         new_color = "#7fff00"
 
