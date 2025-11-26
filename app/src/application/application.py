@@ -1,6 +1,7 @@
 import logging
 import sys
 import threading
+# import datetime # 削除: ロジック移動のため不要
 
 from PyQt5.QtCore import QObject, QTimer, pyqtSlot, Qt
 from PyQt5.QtWidgets import QApplication
@@ -17,6 +18,8 @@ from src.telemetry.sender_interface import TelemetrySender
 from src.tpms.tpms_worker import TpmsWorker
 from src.util import config
 from src.util.fuel_store import FuelStore
+# from src.util.distance_store import DistanceStore # 削除: Trackerが持つため不要
+from src.mileage.mileage_tracker import MileageTracker # ★追加
 
 from src.hardware.encoder_worker import EncoderWorker
 from src.gopro.gopro_worker import GoProWorker
@@ -51,6 +54,10 @@ class Application(QObject, WindowListener):
             tank_capacity_ml=self.tank_capacity_ml,
             current_remaining_ml=current_start_ml,
         )
+        
+        # --- 2. 走行距離の管理 (修正: Trackerを使用) ---
+        # ロジックを MileageTracker に委譲することで Application がすっきりしました
+        self.mileage_tracker = MileageTracker()
         
         # ラップタイマー
         self.lap_timer = LapTimer()
@@ -118,6 +125,7 @@ class Application(QObject, WindowListener):
     def cleanup(self):
         logger.info("Application shutting down...")
         self.save_fuel_state()
+        self.mileage_tracker.save() # ★修正: Trackerに保存を依頼
 
         if self.csv_logger.is_active:
             self.csv_logger.stop()
@@ -167,7 +175,8 @@ class Application(QObject, WindowListener):
         self.encoder_worker.rotated_ccw.connect(self.window.input_ccw)
         self.encoder_worker.button_pressed.connect(self.window.input_enter)
 
-        self.fuel_save_timer.timeout.connect(self.save_fuel_state)
+        # タイマーで燃料と距離を定期保存
+        self.fuel_save_timer.timeout.connect(self.save_states_periodically)
         self.fuel_save_timer.start(config.FUEL_SAVE_INTERVAL_MS)
 
         self.tpms_worker.start()
@@ -177,6 +186,12 @@ class Application(QObject, WindowListener):
             self.gps_thread.start()
 
         self.splash.start_fade_out()
+
+    @pyqtSlot()
+    def save_states_periodically(self):
+        """定期的に状態を保存するスロット"""
+        self.save_fuel_state()
+        self.mileage_tracker.save() # ★修正: Trackerに保存を依頼
 
     @pyqtSlot()
     def reset_fuel_integrator(self):
@@ -232,14 +247,9 @@ class Application(QObject, WindowListener):
         dash_info = self.machine.canMaster.dashMachineInfo
         fuel_percentage = self.fuel_calculator.remaining_fuel_percent
 
-        # ★ デバッグ時はモック更新をLapTimerに依頼
-        # 本番時は on_gps_update で LapTimer が更新されるため、ここでは何もしない
         if config.debug:
             self.lap_timer.update_mock(dash_info)
             
-        # ★以前ここに存在した「else: currentLapTime = ...」というコードを削除済み
-        # これにより、勝手にタイマーが進むことがなくなります。
-
         current_rpm = int(dash_info.rpm)
         
         if current_rpm >= 500:
@@ -278,17 +288,26 @@ class Application(QObject, WindowListener):
             )
 
         if self.window is not None:
+            # ★修正: Trackerに計算と取得を依頼
+            session_km = self.current_gps_data.get("total_distance_km", 0.0)
+            self.mileage_tracker.update(session_km)
+            daily_km, total_km = self.mileage_tracker.get_mileage()
+
             self.window.updateDashboard(
                 dash_info,
                 fuel_percentage,
                 self.latest_tpms_data,
-                self.current_gps_data
+                self.current_gps_data,
+                daily_km, 
+                total_km
             )
         return super().onUpdate()
 
     def save_fuel_state(self):
         current_ml = self.fuel_calculator.remaining_fuel_ml
         self.fuel_store.save_state(current_ml)
+
+    # save_distance_stateメソッドは削除し、mileage_tracker.save()に置き換えました
 
     @pyqtSlot(int)
     def change_lsd_level(self, level: int):
