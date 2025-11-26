@@ -695,6 +695,123 @@ class MileageScreen(QWidget):
         return False
 
 
+# ★★★ 新規: GPS Sector 設定画面（プレースホルダー） ★★★
+class GpsSectorScreen(QWidget):
+    requestSetSector = pyqtSignal(int)  # ★追加: セクター設定シグナル
+    requestBack = pyqtSignal()
+
+    def __init__(self):
+        super().__init__()
+        self.layout = QVBoxLayout()
+        self.current_sector = 1 # 現在選択中のセクター
+        self.is_processing = False
+        
+        title = QLabel("GPS SECTOR SETTINGS")
+        title.setAlignment(Qt.AlignCenter)
+        title.setStyleSheet("font-size: 32px; font-weight: bold; color: #FF00FF; margin-bottom: 10px;")
+        self.layout.addWidget(title)
+
+        # GPS情報表示部 (上段)
+        infoLayout = QGridLayout()
+        self.latBox = TitleValueBox("Latitude")
+        self.lonBox = TitleValueBox("Longitude")
+        self.satsBox = TitleValueBox("Sats/Quality")
+        
+        for box in [self.latBox, self.lonBox, self.satsBox]:
+            box.valueLabel.setFontScale(0.3)
+            
+        infoLayout.addWidget(self.latBox, 0, 0)
+        infoLayout.addWidget(self.lonBox, 0, 1)
+        infoLayout.addWidget(self.satsBox, 1, 0, 1, 2)
+        self.layout.addLayout(infoLayout)
+
+        # セクター選択部 (中段)
+        self.sectorLabel = QLabel("TARGET: SECTOR 1")
+        self.sectorLabel.setAlignment(Qt.AlignCenter)
+        self.sectorLabel.setStyleSheet("font-size: 50px; font-weight: bold; color: yellow; margin: 20px;")
+        self.layout.addWidget(self.sectorLabel)
+
+        # 設定完了メッセージ (オーバーレイ的扱い)
+        self.message_label = QLabel("SET!")
+        self.message_label.setAlignment(Qt.AlignCenter)
+        self.message_label.setStyleSheet("font-size: 60px; font-weight: bold; color: #00FF00; background-color: rgba(0, 0, 0, 200); border-radius: 10px;")
+        self.message_label.hide()
+        self.layout.addWidget(self.message_label)
+
+        # 操作説明 (下段)
+        self.hint_label = QLabel("Rotary: Select Sector\nPush: SET POS\n") # ★修正: BACKの操作を追加したいが…
+        self.hint_label.setAlignment(Qt.AlignCenter)
+        self.hint_label.setStyleSheet("font-size: 20px; color: #AAA; margin-top: 10px;")
+        self.layout.addWidget(self.hint_label)
+
+        self.setLayout(self.layout)
+        
+        palette = self.palette()
+        palette.setColor(self.backgroundRole(), QColor("#333"))
+        self.setPalette(palette)
+        self.setAutoFillBackground(True)
+
+    def showEvent(self, event):
+        self.message_label.hide()
+        self.hint_label.show()
+        self.is_processing = False
+        super().showEvent(event)
+
+    def update_gps_data(self, gps_data: dict):
+        lat = gps_data.get("latitude", 0.0)
+        lon = gps_data.get("longitude", 0.0)
+        sats = gps_data.get("sats", 0)
+        quality = gps_data.get("quality", 0)
+
+        self.latBox.updateValueLabel(f"{lat:.6f}")
+        self.lonBox.updateValueLabel(f"{lon:.6f}")
+        self.satsBox.updateValueLabel(f"Sat:{sats} Q:{quality}")
+
+    def handle_input(self, input_type: str) -> bool:
+        if self.is_processing:
+            return True
+
+        if input_type == "CW":
+            if self.current_sector < 10: # 最大10セクターまで
+                self.current_sector += 1
+                self.sectorLabel.setText(f"TARGET: SECTOR {self.current_sector}")
+            elif self.current_sector == 10: # 10の次はBACK
+                self.current_sector = 11 # 11 = BACK
+                self.sectorLabel.setText("<< BACK")
+            return True
+
+        elif input_type == "CCW":
+            if self.current_sector > 1:
+                self.current_sector -= 1
+                if self.current_sector < 11:
+                    self.sectorLabel.setText(f"TARGET: SECTOR {self.current_sector}")
+            return True
+
+        elif input_type == "ENTER":
+            # BACKが選択されている場合
+            if self.current_sector == 11:
+                self.requestBack.emit()
+                return True
+
+            # セクター設定処理
+            self.is_processing = True
+            self.requestSetSector.emit(self.current_sector)
+            
+            self.hint_label.hide()
+            self.message_label.setText(f"SECTOR {self.current_sector}\nSET!")
+            self.message_label.show()
+            
+            QTimer.singleShot(1500, self._finish_processing)
+            return True
+            
+        return False
+
+    def _finish_processing(self):
+        self.message_label.hide()
+        self.hint_label.show()
+        self.is_processing = False
+
+
 # --- 3. 設定画面 ---
 class SettingsScreen(QWidget):
     requestOpenGpsMenu = pyqtSignal()
@@ -703,6 +820,7 @@ class SettingsScreen(QWidget):
     requestOpenLSDMenu = pyqtSignal()
     requestLapTimeSetup = pyqtSignal()
     requestOpenMileageMenu = pyqtSignal()
+    requestOpenGpsSectorMenu = pyqtSignal() # ★新規: GPS Sectorメニュー用シグナル
     requestExit = pyqtSignal()
 
     def __init__(self):
@@ -738,8 +856,9 @@ class SettingsScreen(QWidget):
             "3. GoPro Menu >",
             "4. LSD Adjustment >",
             "5. Lap Time Settings",
-            "6. Mileage Info >",
-            "7. EXIT"
+            "6. GPS Sector Settings >", # ★新規: 項目追加
+            "7. Mileage Info >",
+            "8. EXIT"
         ]
         self.list_widget.addItems(self.items)
         self.list_widget.setCurrentRow(0)
@@ -781,8 +900,10 @@ class SettingsScreen(QWidget):
             elif current_row == 4:
                 self.requestLapTimeSetup.emit()
             elif current_row == 5:
-                self.requestOpenMileageMenu.emit()
+                self.requestOpenGpsSectorMenu.emit() # ★新規
             elif current_row == 6:
+                self.requestOpenMileageMenu.emit()
+            elif current_row == 7:
                 self.requestExit.emit()
             return True
 
@@ -799,6 +920,7 @@ class MainDisplayWindow(QDialog):
     requestGoProRecStop = pyqtSignal()
     requestLapTimeSetup = pyqtSignal()
     requestLsdChange = pyqtSignal(int)
+    requestSetSector = pyqtSignal(int) # ★新規: セクター設定用シグナル
 
     def __init__(self, listener: WindowListener):
         super(MainDisplayWindow, self).__init__(None)
@@ -823,6 +945,7 @@ class MainDisplayWindow(QDialog):
         self.settings.requestOpenLSDMenu.connect(self.open_lsd_menu)
         self.settings.requestLapTimeSetup.connect(self.requestLapTimeSetup.emit)
         self.settings.requestOpenMileageMenu.connect(self.open_mileage_menu)
+        self.settings.requestOpenGpsSectorMenu.connect(self.open_gps_sector_menu) # ★新規
         self.settings.requestExit.connect(self.return_to_dashboard)
         
         # 3. GoPro Menu
@@ -852,6 +975,11 @@ class MainDisplayWindow(QDialog):
         self.mileage_screen = MileageScreen()
         self.mileage_screen.requestBack.connect(self.return_to_settings)
 
+        # 8. GPS Sector Screen (★新規)
+        self.gps_sector_screen = GpsSectorScreen()
+        self.gps_sector_screen.requestBack.connect(self.return_to_settings)
+        self.gps_sector_screen.requestSetSector.connect(self.requestSetSector.emit) # シグナル転送
+
         self.stack.addWidget(self.dashboard)   # Index 0
         self.stack.addWidget(self.settings)    # Index 1
         self.stack.addWidget(self.gopro_menu)  # Index 2
@@ -859,6 +987,7 @@ class MainDisplayWindow(QDialog):
         self.stack.addWidget(self.gps_screen)  # Index 4
         self.stack.addWidget(self.fuel_screen) # Index 5
         self.stack.addWidget(self.mileage_screen) # Index 6
+        self.stack.addWidget(self.gps_sector_screen) # Index 7
         
         layout = QGridLayout()
         layout.setContentsMargins(0, 0, 0, 0)
@@ -883,6 +1012,9 @@ class MainDisplayWindow(QDialog):
     def open_mileage_menu(self):
         self.stack.setCurrentWidget(self.mileage_screen)
 
+    def open_gps_sector_menu(self): # ★新規
+        self.stack.setCurrentWidget(self.gps_sector_screen)
+
     def return_to_settings(self):
         self.stack.setCurrentWidget(self.settings)
 
@@ -893,7 +1025,6 @@ class MainDisplayWindow(QDialog):
         self.dashboard.updateGoProBattery(value)
         self.gopro_menu.update_battery(value)
 
-    # ★ここが修正ポイント: 引数を追加
     def updateDashboard(self, dashMachineInfo, fuel_percentage, tpms_data, gps_data, daily_km=0.0, total_km=0.0): 
         current_widget = self.stack.currentWidget()
 
@@ -908,6 +1039,9 @@ class MainDisplayWindow(QDialog):
 
         elif current_widget == self.mileage_screen:
             self.mileage_screen.update_distance(daily_km, total_km)
+            
+        elif current_widget == self.gps_sector_screen:
+            self.gps_sector_screen.update_gps_data(gps_data)
 
     def input_cw(self):
         self._dispatch_input("CW", direction=1)

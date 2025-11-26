@@ -117,7 +117,6 @@ class GpsWorker(QObject):
         self.last_valid_latitude = 0.0
         self.last_valid_longitude = 0.0
         
-        # ★追加: 時刻同期が完了したかどうかのフラグ
         self.is_time_synced = False
 
         # データを一時保存する
@@ -129,6 +128,7 @@ class GpsWorker(QObject):
             "sats": 0,  # GGA の衛星数
             "status": "V",  # RMC のステータス (A=Active, V=Void)
             "speed_kph": 0.0,  # VTG の速度 (km/h)
+            "heading": 0.0,    # ★追加: VTG の進行方向 (度)
             "total_distance_km": 0.0,
         }
 
@@ -202,7 +202,6 @@ class GpsWorker(QObject):
                                     )
 
                                     # 極端に大きな移動（瞬間移動）は無視する
-                                    # 1秒（timeout=1.0）で 500m (1800km/h) 以上の移動は異常値とする
                                     if distance_diff < 0.5:
                                         self.total_distance_km += distance_diff
 
@@ -215,7 +214,7 @@ class GpsWorker(QObject):
                                 self.total_distance_km
                             )
 
-                            # シグナルを送信 (コピーを渡すことで参照によるバグを防ぐ)
+                            # シグナルを送信
                             self.data_received.emit(self.last_known_data.copy())
 
                 except serial.SerialException as se:
@@ -251,7 +250,7 @@ class GpsWorker(QObject):
             parts = sentence_part.split("*")[0].split(",")
             sentence_type = parts[0]
 
-            # $GNGGA,時刻,緯度,N/S,経度,E/W,測位品質,衛星数,...
+            # $GNGGA
             if sentence_type.endswith("GGA"):
                 if len(parts) > 7:
                     time_str = parts[1]
@@ -280,21 +279,20 @@ class GpsWorker(QObject):
                     else:
                         self.last_known_data["status"] = "V"
 
-                    return True  # データ更新
+                    return True
 
-            # $GNRMC,時刻,ステータス,緯度,N/S,経度,E/W,速度(knot),方位,日付,...
+            # $GNRMC
             elif sentence_type.endswith("RMC"):
-                # RMCの日付情報は index 9 にあるため、少なくとも10要素必要
                 if len(parts) > 9:
                     time_str = parts[1]
-                    status_str = parts[2]  # 'A' or 'V'
+                    status_str = parts[2]
                     lat_str = parts[3]
                     lat_dir = parts[4]
                     lon_str = parts[5]
                     lon_dir = parts[6]
-                    # speed_knots = parts[7]
-                    # track_angle = parts[8]
-                    date_str = parts[9]    # DDMMYY
+                    # parts[7] speed knots
+                    # parts[8] track angle (heading)
+                    date_str = parts[9]
 
                     self.last_known_data["time"] = parse_nmea_time(time_str)
                     self.last_known_data["status"] = status_str
@@ -307,29 +305,40 @@ class GpsWorker(QObject):
                             lon_str, lon_dir
                         )
 
+                    # RMCからも方位が取れるが、VTGがあればそちらを優先してもよい
+                    # ここでは取得しておく
+                    track_angle_str = parts[8]
+                    if track_angle_str:
+                         self.last_known_data["heading"] = float(track_angle_str)
+
                     if status_str == "A" and self.last_known_data["quality"] == 0:
-                        self.last_known_data["quality"] = 1  # RMCが有効なら、最低品質1
+                        self.last_known_data["quality"] = 1
                     elif status_str == "V":
                         self.last_known_data["quality"] = 0
                     
-                    # ★追加: GPS時刻でシステム時計を合わせる (起動後1回だけ)
-                    # ステータスがActive('A')で、まだ同期しておらず、時刻と日付が取得できている場合
                     if status_str == 'A' and not self.is_time_synced and time_str and date_str:
                         self._sync_system_time(date_str, time_str)
 
-                    return True  # データ更新
+                    return True
 
-            # $GNVTG,......,速度(km/h),K*cs
+            # $GNVTG,course,T,mag,M,speed_knots,N,speed_kph,K*cs
             elif sentence_type.endswith("VTG"):
+                # 部品数が可変の場合があるため注意
+                # course(True) は通常 index 1
+                if len(parts) > 1:
+                    course_str = parts[1]
+                    if course_str:
+                        self.last_known_data["heading"] = float(course_str)
+
+                # speed_kph は 'K' の前の要素を探すのが確実だが、固定位置なら index 7
                 if len(parts) > 8:
-                    speed_str = parts[7]  # 速度(km/h)
+                    speed_str = parts[7]
                     self.last_known_data["speed_kph"] = (
                         float(speed_str) if speed_str else 0.0
                     )
-                    return True  # データ更新
+                    return True
 
         except Exception:
-            # パースエラーは無視して次のデータへ
             pass
 
         return False  # データ更新なし
@@ -339,7 +348,6 @@ class GpsWorker(QObject):
         GPSの DDMMYY と HHMMSS.sss を使ってラズパイの時刻を設定する
         """
         try:
-            # 日付: DDMMYY -> 20YY-MM-DD
             if len(date_str) == 6:
                 day = date_str[0:2]
                 month = date_str[2:4]
@@ -347,8 +355,6 @@ class GpsWorker(QObject):
             else:
                 return
 
-            # 時刻: HHMMSS.sss -> HH:MM:SS
-            # .sss (小数点以下) があってもなくても対応できるように先頭6文字だけ使う
             if len(time_str) >= 6:
                 hour = time_str[0:2]
                 minute = time_str[2:4]
@@ -356,15 +362,9 @@ class GpsWorker(QObject):
             else:
                 return
             
-            # dateコマンド用の文字列を作成 (YYYY-MM-DD HH:MM:SS)
             date_cmd_str = f"{year}-{month}-{day} {hour}:{minute}:{second}"
-            
             print(f"GPS Time Sync: Setting system time to {date_cmd_str} UTC...")
-            
-            # ラズパイの時刻を設定 (UTCとして設定)
-            # ※sudo権限が必要ですが、通常piユーザーはパスワードなしでsudodateできることが多いです
             subprocess.run(["sudo", "date", "-u", "-s", date_cmd_str], check=True)
-            
             self.is_time_synced = True
             print("GPS Time Sync: Success!")
             

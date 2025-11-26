@@ -1,13 +1,13 @@
 import logging
 import sys
 import threading
-# import datetime # 削除: ロジック移動のため不要
 
 from PyQt5.QtCore import QObject, QTimer, pyqtSlot, Qt
 from PyQt5.QtWidgets import QApplication
 
 from src.fuel.fuel_calculator import FuelCalculator
 from src.race.lap_timer import LapTimer
+from src.race.course_manager import CourseManager # ★追加
 from src.gui.gui import MainDisplayWindow, WindowListener
 from src.gui.splash_screen import SplashScreen
 from src.machine.machine import Machine
@@ -18,8 +18,7 @@ from src.telemetry.sender_interface import TelemetrySender
 from src.tpms.tpms_worker import TpmsWorker
 from src.util import config
 from src.util.fuel_store import FuelStore
-# from src.util.distance_store import DistanceStore # 削除: Trackerが持つため不要
-from src.mileage.mileage_tracker import MileageTracker # ★追加
+from src.mileage.mileage_tracker import MileageTracker
 
 from src.hardware.encoder_worker import EncoderWorker
 from src.gopro.gopro_worker import GoProWorker
@@ -55,12 +54,13 @@ class Application(QObject, WindowListener):
             current_remaining_ml=current_start_ml,
         )
         
-        # --- 2. 走行距離の管理 (修正: Trackerを使用) ---
-        # ロジックを MileageTracker に委譲することで Application がすっきりしました
+        # --- 2. 走行距離の管理 ---
         self.mileage_tracker = MileageTracker()
         
-        # ラップタイマー
-        self.lap_timer = LapTimer()
+        # --- 3. コース＆ラップタイマー設定 (修正) ---
+        # CourseManagerを作成し、LapTimerに注入する
+        self.course_manager = CourseManager()
+        self.lap_timer = LapTimer(self.course_manager) # ★修正: 引数を渡す
         
         self.machine = Machine(self.fuel_calculator)
 
@@ -80,8 +80,6 @@ class Application(QObject, WindowListener):
         self.gopro_worker = GoProWorker()
 
         self.current_gps_data = {}
-        
-        # LSDの現在のレベルを保持
         self.current_lsd_level = 1
 
         if config.debug:
@@ -125,7 +123,7 @@ class Application(QObject, WindowListener):
     def cleanup(self):
         logger.info("Application shutting down...")
         self.save_fuel_state()
-        self.mileage_tracker.save() # ★修正: Trackerに保存を依頼
+        self.mileage_tracker.save()
 
         if self.csv_logger.is_active:
             self.csv_logger.stop()
@@ -156,6 +154,9 @@ class Application(QObject, WindowListener):
         self.window.requestLapTimeSetup.connect(self.setup_lap_time)
         self.window.requestLsdChange.connect(self.change_lsd_level)
         
+        # ★追加: GUIからのセクター設定リクエストを処理
+        self.window.requestSetSector.connect(self.set_sector_point)
+        
         self.window.requestGoProConnect.connect(self.gopro_worker.start_connection)
         self.window.requestGoProDisconnect.connect(self.gopro_worker.stop)
         self.window.requestGoProRecStart.connect(self.gopro_worker.send_command_record_start)
@@ -175,7 +176,6 @@ class Application(QObject, WindowListener):
         self.encoder_worker.rotated_ccw.connect(self.window.input_ccw)
         self.encoder_worker.button_pressed.connect(self.window.input_enter)
 
-        # タイマーで燃料と距離を定期保存
         self.fuel_save_timer.timeout.connect(self.save_states_periodically)
         self.fuel_save_timer.start(config.FUEL_SAVE_INTERVAL_MS)
 
@@ -189,9 +189,8 @@ class Application(QObject, WindowListener):
 
     @pyqtSlot()
     def save_states_periodically(self):
-        """定期的に状態を保存するスロット"""
         self.save_fuel_state()
-        self.mileage_tracker.save() # ★修正: Trackerに保存を依頼
+        self.mileage_tracker.save()
 
     @pyqtSlot()
     def reset_fuel_integrator(self):
@@ -206,16 +205,44 @@ class Application(QObject, WindowListener):
 
     @pyqtSlot()
     def set_start_line(self):
-        # LapTimerクラスに処理を委譲
+        """
+        ダッシュボード画面での「スタートライン設定」は、
+        キャリブレーション（位置合わせ）として機能させる。
+        """
         if config.debug:
-            print("MOCK: スタートライン設定 (デバッグモード)")
+            print("MOCK: キャリブレーション (デバッグモード)")
             self.lap_timer.reset_state(self.machine.canMaster.dashMachineInfo)
             return
 
         lat = self.current_gps_data.get("latitude", 0.0)
         lon = self.current_gps_data.get("longitude", 0.0)
         
-        self.lap_timer.set_start_line(lat, lon, self.machine.canMaster.dashMachineInfo)
+        # 現在地に合わせてコース全体を平行移動
+        self.course_manager.calibrate_position(lat, lon)
+        # タイマー状態をリセット
+        self.lap_timer.reset_state(self.machine.canMaster.dashMachineInfo)
+
+    @pyqtSlot(int)
+    def set_sector_point(self, sector_index: int):
+        """
+        セクター設定画面からの「セクター登録」リクエスト。
+        指定されたインデックス(1〜)に対応するセクターを登録する。
+        ※Index 1 (Sector 1) はスタートライン(Index 0)の代わりとして扱う運用にするか、
+          GUI側でスタートライン(Index 0)を選択できるようにするかは要検討だが、
+          ここでは GUIの「SECTOR 1」を内部的な「START/FINISHライン (Index 0)」として扱う。
+        """
+        # 運用案: GUIの「1」はスタート/フィニッシュラインとする
+        internal_index = sector_index - 1
+        
+        lat = self.current_gps_data.get("latitude", 0.0)
+        lon = self.current_gps_data.get("longitude", 0.0)
+        heading = self.current_gps_data.get("heading", 0.0)
+        
+        if lat == 0.0 and lon == 0.0:
+            print("GPS未測位のためセクター登録できません。")
+            return
+
+        self.course_manager.set_sector_point(internal_index, lat, lon, heading)
 
     @pyqtSlot(dict)
     def on_tpms_update(self, data: dict):
@@ -230,7 +257,7 @@ class Application(QObject, WindowListener):
         if hasattr(self.machine.canMaster.dashMachineInfo, "gpsQuality"):
             self.machine.canMaster.dashMachineInfo.gpsQuality = data.get("quality", 0)
             
-        # LapTimerに更新を依頼
+        # LapTimerに更新を依頼 (CourseManagerを使った判定が行われる)
         self.lap_timer.update(data, self.machine.canMaster.dashMachineInfo)
 
     def show_main_window(self):
@@ -288,7 +315,6 @@ class Application(QObject, WindowListener):
             )
 
         if self.window is not None:
-            # ★修正: Trackerに計算と取得を依頼
             session_km = self.current_gps_data.get("total_distance_km", 0.0)
             self.mileage_tracker.update(session_km)
             daily_km, total_km = self.mileage_tracker.get_mileage()
@@ -306,8 +332,6 @@ class Application(QObject, WindowListener):
     def save_fuel_state(self):
         current_ml = self.fuel_calculator.remaining_fuel_ml
         self.fuel_store.save_state(current_ml)
-
-    # save_distance_stateメソッドは削除し、mileage_tracker.save()に置き換えました
 
     @pyqtSlot(int)
     def change_lsd_level(self, level: int):
