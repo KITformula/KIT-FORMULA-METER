@@ -1,45 +1,34 @@
 import datetime
 import math
-import subprocess  # ★追加: システムコマンド実行用
+import time
+import threading
+import subprocess
 import serial
+import random
 from PyQt5.QtCore import QObject, pyqtSignal
 
 # ===============================================
-# ヘルパー関数 (tougou8.py から移植)
+# ヘルパー関数
 # ===============================================
 
-
 def nmea_to_decimal_degrees(nmea_val, direction):
-    """
-    NMEA形式(DDMM.MMMMM または DDDMM.MMMMM)を十進度の緯度経度に変換する
-    """
     try:
         if not nmea_val:
             return None
-
         dot_index = nmea_val.find(".")
         if dot_index == -1:
-            return None  # 不正なフォーマット
-
+            return None
         deg_chars_index = dot_index - 2
-
         degrees = float(nmea_val[:deg_chars_index])
         minutes = float(nmea_val[deg_chars_index:])
-
         decimal_degrees = degrees + (minutes / 60)
-
         if direction in ("S", "W"):
             decimal_degrees = -decimal_degrees
-
         return decimal_degrees
     except ValueError:
-        return None  # 変換エラー
-
+        return None
 
 def parse_nmea_time(time_str):
-    """
-    NMEAの時刻文字列 (HHMMSS.sss) を datetime.time オブジェクトに変換
-    """
     if not time_str or "." not in time_str:
         return None
     try:
@@ -47,52 +36,32 @@ def parse_nmea_time(time_str):
         m = int(time_str[2:4])
         s_full = float(time_str[4:])
         s = int(s_full)
-        ms = int((s_full - s) * 1_000_000)  # マイクロ秒
-
-        # タイムゾーン情報を付加 (UTC)
+        ms = int((s_full - s) * 1_000_000)
         return datetime.time(
             hour=h, minute=m, second=s, microsecond=ms, tzinfo=datetime.timezone.utc
         )
     except Exception:
         return None
 
-
 def calculate_distance_km(lat1, lon1, lat2, lon2):
-    """
-    2点間の緯度経度から距離(km)を計算する (ハヴァサイン公式)
-    """
-    # 地球の半径 (km)
     R = 6371.0
-
-    # (0, 0) または無効な座標の場合は 0 を返す
     if (lat1 == 0.0 and lon1 == 0.0) or (lat2 == 0.0 and lon2 == 0.0):
         return 0.0
-
-    # 緯度経度をラジアンに変換
     lat1_rad = math.radians(lat1)
     lon1_rad = math.radians(lon1)
     lat2_rad = math.radians(lat2)
     lon2_rad = math.radians(lon2)
-
-    # 差分
     dlon = lon2_rad - lon1_rad
     dlat = lat2_rad - lat1_rad
-
-    # ハヴァサイン公式
     a = (
         math.sin(dlat / 2) ** 2
         + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon / 2) ** 2
     )
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-
     distance = R * c
     return distance
 
-
 def calculate_distance_meters(lat1, lon1, lat2, lon2):
-    """
-    2点間の緯度経度から距離(m)を計算する
-    """
     return calculate_distance_km(lat1, lon1, lat2, lon2) * 1000.0
 
 
@@ -100,40 +69,36 @@ def calculate_distance_meters(lat1, lon1, lat2, lon2):
 # GPS Worker クラス
 # ===============================================
 
-
 class GpsWorker(QObject):
-    data_received = pyqtSignal(dict)  # 処理されたGPSデータ
-    error_occurred = pyqtSignal(str)  # エラーメッセージ
+    data_received = pyqtSignal(dict)
+    error_occurred = pyqtSignal(str)
 
-    def __init__(self, port, baudrate, parent=None):
+    def __init__(self, port, baudrate, debug_mode=False, parent=None):
         super().__init__(parent)
         self.port = port
         self.baudrate = baudrate
+        self.debug_mode = debug_mode
         self._running = True
         self.ser = None
 
-        # 走行距離と前回の座標
         self.total_distance_km = 0.0
         self.last_valid_latitude = 0.0
         self.last_valid_longitude = 0.0
-        
         self.is_time_synced = False
 
-        # データを一時保存する
         self.last_known_data = {
-            "time": None,  # datetime.time オブジェクト
+            "time": None,
             "latitude": 0.0,
             "longitude": 0.0,
-            "quality": 0,  # GGA の測位品質
-            "sats": 0,  # GGA の衛星数
-            "status": "V",  # RMC のステータス (A=Active, V=Void)
-            "speed_kph": 0.0,  # VTG の速度 (km/h)
-            "heading": 0.0,    # ★追加: VTG の進行方向 (度)
+            "quality": 0,
+            "sats": 0,
+            "status": "V",
+            "speed_kph": 0.0,
+            "heading": 0.0,
             "total_distance_km": 0.0,
         }
 
     def stop(self):
-        """スレッドとシリアルポートを停止する"""
         self._running = False
         if self.ser and self.ser.is_open:
             try:
@@ -142,115 +107,134 @@ class GpsWorker(QObject):
                 print(f"シリアルポートクローズエラー: {e}")
 
     def run(self):
-        """シリアルポートからNMEAデータを読み込み、手動で解析し、距離を計算する"""
+        if self.debug_mode:
+            self._run_mock()
+        else:
+            self._run_serial()
+
+    def _run_mock(self):
+        """デバッグ用: 円を描いて走行するデータを生成"""
+        print("★ GPS Worker: Mock Mode Started")
+        
+        # 基準点 (適当なサーキットの座標など)
+        center_lat = 35.3700
+        center_lon = 138.9285
+        radius_meters = 200.0
+        speed_kmh = 60.0
+        
+        # 角度 (ラジアン)
+        angle = 0.0
+        
+        # 0.1秒ごとに更新 (10Hz)
+        interval = 0.1
+        
+        while self._running:
+            # 座標計算 (簡易的)
+            # 緯度1度≒111km, 経度1度≒91km
+            lat_offset = (radius_meters * math.sin(angle)) / 111000.0
+            lon_offset = (radius_meters * math.cos(angle)) / 91000.0
+            
+            current_lat = center_lat + lat_offset
+            current_lon = center_lon + lon_offset
+            
+            # 方位計算 (接線方向)
+            # 進行方向は反時計回りとする -> 接線角度 = 現在角度 + 90度
+            heading_deg = math.degrees(angle) + 90.0
+            if heading_deg >= 360: heading_deg -= 360
+            
+            # データの更新
+            self.last_known_data["latitude"] = current_lat
+            self.last_known_data["longitude"] = current_lon
+            self.last_known_data["heading"] = heading_deg
+            self.last_known_data["speed_kph"] = speed_kmh
+            self.last_known_data["quality"] = 1 # Fixあり
+            self.last_known_data["sats"] = 12
+            self.last_known_data["status"] = "A"
+            
+            # 距離計算
+            dist = (speed_kmh / 3600.0) * interval # km
+            self.total_distance_km += dist
+            self.last_known_data["total_distance_km"] = self.total_distance_km
+            
+            # 送信
+            self.data_received.emit(self.last_known_data.copy())
+            
+            # 角度を進める
+            # 角速度 w = v / r
+            v_ms = speed_kmh / 3.6
+            w = v_ms / radius_meters
+            angle += w * interval
+            if angle > 2 * math.pi:
+                angle -= 2 * math.pi
+                
+            time.sleep(interval)
+            
+        print("GPS Mock Finished")
+
+    def _run_serial(self):
+        """本番用: シリアルポートから読み込み"""
         try:
-            # シリアルポートを開く
             self.ser = serial.Serial(self.port, self.baudrate, timeout=1.0)
             print(f"GPS: シリアルポート {self.port} を開きました。受信待機中...")
-
             raw_line_count = 0
 
             while self._running:
                 if not self.ser.is_open:
                     break
-
-                line = None
                 try:
-                    # 1行読み込み
                     line = self.ser.readline().decode("ascii", errors="ignore").strip()
-
-                    if not line:
-                        continue
-
-                    # 最初の数行はデバッグ用に表示
+                    if not line: continue
+                    
                     if raw_line_count < 5:
-                        print(f"GPS Raw Data: {line}")
+                        print(f"GPS Raw: {line}")
                         raw_line_count += 1
 
-                    # $GNGGA, $GNRMC, $GNVTG などを解析
                     if line.startswith(("$GN", "$GP")):
-                        # NMEAセンテンスを1行パースし、データが更新されたか確認
-                        updated_data = self.parse_nmea_line(line)
-
-                        if updated_data:
-                            # データが更新された場合、距離計算などを行う
-
-                            # 現在の有効な座標と品質を取得
-                            current_lat = self.last_known_data.get("latitude", 0.0)
-                            current_lon = self.last_known_data.get("longitude", 0.0)
-                            quality = self.last_known_data.get("quality", 0)
-                            status = self.last_known_data.get("status", "V")
-
-                            # (0,0) でない、かつ品質が有効な場合
-                            is_valid_fix = (quality > 0 or status == "A") and (
-                                current_lat != 0.0 or current_lon != 0.0
-                            )
-
-                            # 距離計算のロジック
-                            if is_valid_fix:
-                                # 測位が有効な場合
-                                if (
-                                    self.last_valid_latitude != 0.0
-                                    or self.last_valid_longitude != 0.0
-                                ):
-                                    # 前回の有効な座標がある場合のみ距離を計算
-                                    distance_diff = calculate_distance_km(
-                                        self.last_valid_latitude,
-                                        self.last_valid_longitude,
-                                        current_lat,
-                                        current_lon,
-                                    )
-
-                                    # 極端に大きな移動（瞬間移動）は無視する
-                                    if distance_diff < 0.5:
-                                        self.total_distance_km += distance_diff
-
-                                # 今回の有効な座標を保存
-                                self.last_valid_latitude = current_lat
-                                self.last_valid_longitude = current_lon
-
-                            # 走行距離を送信データに含める
-                            self.last_known_data["total_distance_km"] = (
-                                self.total_distance_km
-                            )
-
-                            # シグナルを送信
-                            self.data_received.emit(self.last_known_data.copy())
+                        if self.parse_nmea_line(line):
+                            self._update_distance_and_emit()
 
                 except serial.SerialException as se:
-                    if self._running:
-                        self.error_occurred.emit(f"GPSシリアルエラー: {se}")
-                    break  # ループ終了
+                    if self._running: self.error_occurred.emit(f"GPS Serial Error: {se}")
+                    break
                 except Exception:
-                    # パース中の一般的なエラー
                     pass
-
-        except serial.SerialException as e:
-            if self._running:
-                self.error_occurred.emit(
-                    f"シリアルポート '{self.port}' が開けません: {e}"
-                )
         except Exception as e:
-            if self._running:
-                self.error_occurred.emit(f"予期せぬ実行エラー (GPS): {e}")
+            if self._running: self.error_occurred.emit(f"GPS Init Error: {e}")
         finally:
             self.stop()
-            print("GPSWorker 終了")
+
+    def _update_distance_and_emit(self):
+        """距離計算とシグナル発行（本番用）"""
+        current_lat = self.last_known_data.get("latitude", 0.0)
+        current_lon = self.last_known_data.get("longitude", 0.0)
+        quality = self.last_known_data.get("quality", 0)
+        status = self.last_known_data.get("status", "V")
+
+        is_valid = (quality > 0 or status == "A") and (current_lat != 0.0 or current_lon != 0.0)
+
+        if is_valid:
+            if self.last_valid_latitude != 0.0 or self.last_valid_longitude != 0.0:
+                diff = calculate_distance_km(
+                    self.last_valid_latitude, self.last_valid_longitude,
+                    current_lat, current_lon
+                )
+                if diff < 0.5:
+                    self.total_distance_km += diff
+            
+            self.last_valid_latitude = current_lat
+            self.last_valid_longitude = current_lon
+
+        self.last_known_data["total_distance_km"] = self.total_distance_km
+        self.data_received.emit(self.last_known_data.copy())
 
     def parse_nmea_line(self, line):
-        """
-        NMEAセンテンスを1行パースし、last_known_dataを更新する
-        戻り値: データが更新された場合は True
-        """
+        # (既存のコードと同じ内容)
         try:
-            if "$" not in line:
-                return False
-
+            if "$" not in line: return False
             sentence_part = line[line.find("$") :]
             parts = sentence_part.split("*")[0].split(",")
             sentence_type = parts[0]
 
-            # $GNGGA
             if sentence_type.endswith("GGA"):
                 if len(parts) > 7:
                     time_str = parts[1]
@@ -262,26 +246,18 @@ class GpsWorker(QObject):
                     sats_str = parts[7]
 
                     self.last_known_data["time"] = parse_nmea_time(time_str)
-
                     if lat_str and lon_str:
-                        self.last_known_data["latitude"] = nmea_to_decimal_degrees(
-                            lat_str, lat_dir
-                        )
-                        self.last_known_data["longitude"] = nmea_to_decimal_degrees(
-                            lon_str, lon_dir
-                        )
-
+                        self.last_known_data["latitude"] = nmea_to_decimal_degrees(lat_str, lat_dir)
+                        self.last_known_data["longitude"] = nmea_to_decimal_degrees(lon_str, lon_dir)
                     self.last_known_data["quality"] = int(q_str) if q_str else 0
                     self.last_known_data["sats"] = int(sats_str) if sats_str else 0
-
+                    
                     if self.last_known_data["quality"] > 0:
                         self.last_known_data["status"] = "A"
                     else:
                         self.last_known_data["status"] = "V"
-
                     return True
 
-            # $GNRMC
             elif sentence_type.endswith("RMC"):
                 if len(parts) > 9:
                     time_str = parts[1]
@@ -290,83 +266,56 @@ class GpsWorker(QObject):
                     lat_dir = parts[4]
                     lon_str = parts[5]
                     lon_dir = parts[6]
-                    # parts[7] speed knots
-                    # parts[8] track angle (heading)
                     date_str = parts[9]
 
                     self.last_known_data["time"] = parse_nmea_time(time_str)
                     self.last_known_data["status"] = status_str
-
                     if lat_str and lon_str:
-                        self.last_known_data["latitude"] = nmea_to_decimal_degrees(
-                            lat_str, lat_dir
-                        )
-                        self.last_known_data["longitude"] = nmea_to_decimal_degrees(
-                            lon_str, lon_dir
-                        )
+                        self.last_known_data["latitude"] = nmea_to_decimal_degrees(lat_str, lat_dir)
+                        self.last_known_data["longitude"] = nmea_to_decimal_degrees(lon_str, lon_dir)
 
-                    # RMCからも方位が取れるが、VTGがあればそちらを優先してもよい
-                    # ここでは取得しておく
-                    track_angle_str = parts[8]
-                    if track_angle_str:
-                         self.last_known_data["heading"] = float(track_angle_str)
+                    track_angle = parts[8]
+                    if track_angle:
+                        self.last_known_data["heading"] = float(track_angle)
 
                     if status_str == "A" and self.last_known_data["quality"] == 0:
                         self.last_known_data["quality"] = 1
                     elif status_str == "V":
                         self.last_known_data["quality"] = 0
-                    
+                        
                     if status_str == 'A' and not self.is_time_synced and time_str and date_str:
                         self._sync_system_time(date_str, time_str)
-
                     return True
 
-            # $GNVTG,course,T,mag,M,speed_knots,N,speed_kph,K*cs
             elif sentence_type.endswith("VTG"):
-                # 部品数が可変の場合があるため注意
-                # course(True) は通常 index 1
                 if len(parts) > 1:
-                    course_str = parts[1]
-                    if course_str:
-                        self.last_known_data["heading"] = float(course_str)
-
-                # speed_kph は 'K' の前の要素を探すのが確実だが、固定位置なら index 7
+                    course = parts[1]
+                    if course:
+                        self.last_known_data["heading"] = float(course)
                 if len(parts) > 8:
-                    speed_str = parts[7]
-                    self.last_known_data["speed_kph"] = (
-                        float(speed_str) if speed_str else 0.0
-                    )
+                    speed = parts[7]
+                    if speed:
+                        self.last_known_data["speed_kph"] = float(speed)
                     return True
 
         except Exception:
             pass
-
-        return False  # データ更新なし
+        return False
 
     def _sync_system_time(self, date_str, time_str):
-        """
-        GPSの DDMMYY と HHMMSS.sss を使ってラズパイの時刻を設定する
-        """
+        # (既存のコードと同じ内容、ただしデバッグ時は実行しないガードを入れると良い)
+        if self.debug_mode: return
         try:
             if len(date_str) == 6:
-                day = date_str[0:2]
-                month = date_str[2:4]
-                year = "20" + date_str[4:6]
-            else:
-                return
-
+                day, month, year = date_str[0:2], date_str[2:4], "20" + date_str[4:6]
+            else: return
             if len(time_str) >= 6:
-                hour = time_str[0:2]
-                minute = time_str[2:4]
-                second = time_str[4:6]
-            else:
-                return
+                hour, minute, second = time_str[0:2], time_str[2:4], time_str[4:6]
+            else: return
             
-            date_cmd_str = f"{year}-{month}-{day} {hour}:{minute}:{second}"
-            print(f"GPS Time Sync: Setting system time to {date_cmd_str} UTC...")
-            subprocess.run(["sudo", "date", "-u", "-s", date_cmd_str], check=True)
+            date_cmd = f"{year}-{month}-{day} {hour}:{minute}:{second}"
+            print(f"GPS Sync: {date_cmd}")
+            subprocess.run(["sudo", "date", "-u", "-s", date_cmd], check=True)
             self.is_time_synced = True
-            print("GPS Time Sync: Success!")
-            
         except Exception as e:
-            print(f"GPS Time Sync Failed: {e}")
+            print(f"GPS Sync Failed: {e}")

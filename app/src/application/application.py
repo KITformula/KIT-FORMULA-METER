@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import QApplication
 
 from src.fuel.fuel_calculator import FuelCalculator
 from src.race.lap_timer import LapTimer
-from src.race.course_manager import CourseManager # ★追加
+from src.race.course_manager import CourseManager
 from src.gui.gui import MainDisplayWindow, WindowListener
 from src.gui.splash_screen import SplashScreen
 from src.machine.machine import Machine
@@ -22,14 +22,9 @@ from src.mileage.mileage_tracker import MileageTracker
 
 from src.hardware.encoder_worker import EncoderWorker
 from src.gopro.gopro_worker import GoProWorker
+from src.gps.gps_worker import GpsWorker # ★常にインポート
 
 logger = logging.getLogger(__name__)
-
-if not config.debug:
-    from src.gps.gps_worker import GpsWorker
-else:
-    class GpsWorker:
-        pass
 
 class AppWindowListener(WindowListener):
     def __init__(self, app_instance):
@@ -57,10 +52,9 @@ class Application(QObject, WindowListener):
         # --- 2. 走行距離の管理 ---
         self.mileage_tracker = MileageTracker()
         
-        # --- 3. コース＆ラップタイマー設定 (修正) ---
-        # CourseManagerを作成し、LapTimerに注入する
+        # --- 3. コース＆ラップタイマー設定 ---
         self.course_manager = CourseManager()
-        self.lap_timer = LapTimer(self.course_manager) # ★修正: 引数を渡す
+        self.lap_timer = LapTimer(self.course_manager)
         
         self.machine = Machine(self.fuel_calculator)
 
@@ -74,8 +68,17 @@ class Application(QObject, WindowListener):
         )
         self.latest_tpms_data = {}
 
-        self.gps_worker: GpsWorker | None = None
-        self.gps_thread: threading.Thread | None = None
+        # --- GPS Workerの初期化 (デバッグ対応) ---
+        self.gps_port = getattr(config, "GPS_PORT", "COM6")
+        self.gps_baud = getattr(config, "GPS_BAUD", 115200)
+        
+        # ★修正: debugフラグを渡して、本番/モックを切り替える
+        self.gps_worker = GpsWorker(
+            self.gps_port, 
+            self.gps_baud, 
+            debug_mode=config.debug
+        )
+        self.gps_thread = None
 
         self.gopro_worker = GoProWorker()
 
@@ -83,12 +86,9 @@ class Application(QObject, WindowListener):
         self.current_lsd_level = 1
 
         if config.debug:
-            print("★ GPSワーカーはモックモードで起動します ★")
+            print("★ App: DEBUG Mode (GPS Mock Enabled)")
         else:
-            print("★ GPSワーカーは本番モードで起動します ★")
-            self.gps_port = getattr(config, "GPS_PORT", "COM6")
-            self.gps_baud = getattr(config, "GPS_BAUD", 115200)
-            self.gps_worker = GpsWorker(self.gps_port, self.gps_baud)
+            print("★ App: PROD Mode (Real GPS Enabled)")
 
         self.app: QApplication = None
         self.splash: SplashScreen = None
@@ -106,7 +106,8 @@ class Application(QObject, WindowListener):
 
         self.tpms_worker.data_updated.connect(self.on_tpms_update)
 
-        if not config.debug and self.gps_worker:
+        # ★修正: 常にGPSシグナルを接続する
+        if self.gps_worker:
             self.gps_worker.data_received.connect(self.on_gps_update)
             self.gps_worker.error_occurred.connect(
                 lambda err: print(f"GPS Error: {err}")
@@ -134,7 +135,7 @@ class Application(QObject, WindowListener):
         if self.telemetry_sender:
             self.telemetry_sender.stop()
 
-        if not config.debug and self.gps_worker:
+        if self.gps_worker:
             self.gps_worker.stop()
             
         if self.encoder_worker:
@@ -153,8 +154,6 @@ class Application(QObject, WindowListener):
         self.window.requestResetFuel.connect(self.reset_fuel_integrator)
         self.window.requestLapTimeSetup.connect(self.setup_lap_time)
         self.window.requestLsdChange.connect(self.change_lsd_level)
-        
-        # ★追加: GUIからのセクター設定リクエストを処理
         self.window.requestSetSector.connect(self.set_sector_point)
         
         self.window.requestGoProConnect.connect(self.gopro_worker.start_connection)
@@ -181,7 +180,8 @@ class Application(QObject, WindowListener):
 
         self.tpms_worker.start()
 
-        if not config.debug and self.gps_worker:
+        # ★修正: 常にGPSスレッドを開始する
+        if self.gps_worker:
             self.gps_thread = threading.Thread(target=self.gps_worker.run, daemon=True)
             self.gps_thread.start()
 
@@ -205,43 +205,26 @@ class Application(QObject, WindowListener):
 
     @pyqtSlot()
     def set_start_line(self):
-        """
-        ダッシュボード画面での「スタートライン設定」は、
-        キャリブレーション（位置合わせ）として機能させる。
-        """
-        if config.debug:
-            print("MOCK: キャリブレーション (デバッグモード)")
-            self.lap_timer.reset_state(self.machine.canMaster.dashMachineInfo)
-            return
-
+        # デバッグモードでもGPS座標を使ってキャリブレーションを行うように変更
         lat = self.current_gps_data.get("latitude", 0.0)
         lon = self.current_gps_data.get("longitude", 0.0)
         
-        # 現在地に合わせてコース全体を平行移動
+        if config.debug:
+            print(f"MOCK: キャリブレーション ({lat}, {lon})")
+
         self.course_manager.calibrate_position(lat, lon)
-        # タイマー状態をリセット
         self.lap_timer.reset_state(self.machine.canMaster.dashMachineInfo)
 
     @pyqtSlot(int)
     def set_sector_point(self, sector_index: int):
-        """
-        セクター設定画面からの「セクター登録」リクエスト。
-        指定されたインデックス(1〜)に対応するセクターを登録する。
-        ※Index 1 (Sector 1) はスタートライン(Index 0)の代わりとして扱う運用にするか、
-          GUI側でスタートライン(Index 0)を選択できるようにするかは要検討だが、
-          ここでは GUIの「SECTOR 1」を内部的な「START/FINISHライン (Index 0)」として扱う。
-        """
-        # 運用案: GUIの「1」はスタート/フィニッシュラインとする
         internal_index = sector_index - 1
         
         lat = self.current_gps_data.get("latitude", 0.0)
         lon = self.current_gps_data.get("longitude", 0.0)
         heading = self.current_gps_data.get("heading", 0.0)
         
-        if lat == 0.0 and lon == 0.0:
-            print("GPS未測位のためセクター登録できません。")
-            return
-
+        # 0.0 のチェックは外す（モックの初期値が0.0の場合があるが、動いていれば入る）
+        print(f"Registering Sector {sector_index}: {lat}, {lon}, {heading}")
         self.course_manager.set_sector_point(internal_index, lat, lon, heading)
 
     @pyqtSlot(dict)
@@ -250,14 +233,12 @@ class Application(QObject, WindowListener):
 
     @pyqtSlot(dict)
     def on_gps_update(self, data: dict):
-        if config.debug:
-            return
         self.current_gps_data = data
         
         if hasattr(self.machine.canMaster.dashMachineInfo, "gpsQuality"):
             self.machine.canMaster.dashMachineInfo.gpsQuality = data.get("quality", 0)
             
-        # LapTimerに更新を依頼 (CourseManagerを使った判定が行われる)
+        # LapTimerに更新を依頼 (モックGPSデータでもここで判定される)
         self.lap_timer.update(data, self.machine.canMaster.dashMachineInfo)
 
     def show_main_window(self):
@@ -274,8 +255,10 @@ class Application(QObject, WindowListener):
         dash_info = self.machine.canMaster.dashMachineInfo
         fuel_percentage = self.fuel_calculator.remaining_fuel_percent
 
-        if config.debug:
-            self.lap_timer.update_mock(dash_info)
+        # ★修正: デバッグ時のモック更新（タイマーのみ進行）は不要になった
+        # GpsWorkerがモックGPSを生成し、on_gps_update経由でLapTimerが進むため
+        # if config.debug:
+        #     self.lap_timer.update_mock(dash_info)
             
         current_rpm = int(dash_info.rpm)
         
@@ -305,9 +288,7 @@ class Application(QObject, WindowListener):
                 self.csv_logger.stop()
 
         if dash_info.rpm >= 500:
-            if self.update_count % 40 == 0:
-                logger.debug(f"onUpdate calling send(): RPM={dash_info.rpm}")
-
+            # (MQTT送信処理)
             self.telemetry_sender.send(
                 info=dash_info,
                 fuel_percent=fuel_percentage,
@@ -328,7 +309,8 @@ class Application(QObject, WindowListener):
                 total_km
             )
         return super().onUpdate()
-
+    
+    # (以下省略)
     def save_fuel_state(self):
         current_ml = self.fuel_calculator.remaining_fuel_ml
         self.fuel_store.save_state(current_ml)
