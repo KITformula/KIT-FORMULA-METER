@@ -240,7 +240,7 @@ class DashMachineInfo:
         self.lastLapTime = 0.0
         self.lapTimeDiff = 0.0
         self.gpsQuality = 0
-        
+
         self.sector_times = {}
         self.sector_diffs = {}
 

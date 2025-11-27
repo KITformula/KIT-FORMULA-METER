@@ -20,14 +20,14 @@ class DistanceStore:
         ファイルがない場合やエラー時はデフォルト値を返す。
         """
         default_state = {"total_km": 0.0, "daily_km": 0.0, "last_date": ""}
-        
+
         try:
             if not os.path.exists(self.storage_path):
                 return default_state
 
             with open(self.storage_path, "r") as f:
                 data = json.load(f)
-                
+
                 # 古い形式(total_kmのみ)の場合の互換性対応も含め、getで取得
                 # もしファイルにキーがなければデフォルト値(0.0)が使われる
                 total_km = float(data.get("total_km", 0.0))
@@ -37,11 +37,13 @@ class DistanceStore:
                 if total_km < 0 or daily_km < 0:
                     return default_state
 
-                print(f"走行距離ロード: Total={total_km:.1f}km, Daily={daily_km:.1f}km ({last_date})")
+                print(
+                    f"走行距離ロード: Total={total_km:.1f}km, Daily={daily_km:.1f}km ({last_date})"
+                )
                 return {
                     "total_km": total_km,
                     "daily_km": daily_km,
-                    "last_date": last_date
+                    "last_date": last_date,
                 }
 
         except Exception as e:
@@ -54,14 +56,10 @@ class DistanceStore:
         日付は保存時の現在日付（ローカル）を使用する。
         """
         try:
-            today_str = datetime.date.today().isoformat() # YYYY-MM-DD
-            
-            data = {
-                "total_km": total_km,
-                "daily_km": daily_km,
-                "last_date": today_str
-            }
-            
+            today_str = datetime.date.today().isoformat()  # YYYY-MM-DD
+
+            data = {"total_km": total_km, "daily_km": daily_km, "last_date": today_str}
+
             with open(self.storage_path, "w") as f:
                 json.dump(data, f, indent=4)
 

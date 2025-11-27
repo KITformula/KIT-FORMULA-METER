@@ -4,25 +4,28 @@ import os
 from dataclasses import dataclass, asdict
 from typing import List, Optional
 
+
 @dataclass
 class SectorPoint:
-    index: int      # 0=Start/Finish, 1=Sector1, 2=Sector2...
+    index: int  # 0=Start/Finish, 1=Sector1, 2=Sector2...
     lat: float
     lon: float
     heading: float  # 進行方向 (度, 0-360)
+
 
 class CourseManager:
     """
     コース（セクターライン）の定義データを管理し、
     通過判定に必要なゲート情報を提供するクラス。
     """
+
     COURSE_FILE_PATH = "course_data.json"
-    GATE_WIDTH_METERS = 5.0 # ゲートの幅 (左右合計)
+    GATE_WIDTH_METERS = 5.0  # ゲートの幅 (左右合計)
 
     def __init__(self):
         self.sectors: List[SectorPoint] = []
         self.load_course()
-        
+
         # キャリブレーション用のオフセット値
         self.offset_lat = 0.0
         self.offset_lon = 0.0
@@ -33,13 +36,13 @@ class CourseManager:
         """
         # 既存の同じインデックスがあれば削除
         self.sectors = [s for s in self.sectors if s.index != index]
-        
+
         new_sector = SectorPoint(index, lat, lon, heading)
         self.sectors.append(new_sector)
-        
+
         # インデックス順にソート
         self.sectors.sort(key=lambda s: s.index)
-        
+
         print(f"Sector {index} registered: {lat}, {lon}, {heading}deg")
         self.save_course()
 
@@ -56,8 +59,10 @@ class CourseManager:
         # 記録されているスタート地点と、現在の地点の差分を計算
         self.offset_lat = current_lat - start_sector.lat
         self.offset_lon = current_lon - start_sector.lon
-        
-        print(f"Course Calibrated. Offset: Lat={self.offset_lat}, Lon={self.offset_lon}")
+
+        print(
+            f"Course Calibrated. Offset: Lat={self.offset_lat}, Lon={self.offset_lon}"
+        )
 
     def get_sector(self, index: int) -> Optional[SectorPoint]:
         for s in self.sectors:
@@ -84,11 +89,11 @@ class CourseManager:
         # headingは北0度、時計回り。
         # 左側: heading - 90
         # 右側: heading + 90
-        
+
         # 簡易的なメートル→緯度経度変換係数 (日本付近)
         # 緯度1度 ≒ 111km, 経度1度 ≒ 91km (cos(35deg) * 111)
         METERS_PER_LAT = 111000.0
-        METERS_PER_LON = 91000.0 
+        METERS_PER_LON = 91000.0
 
         half_width = self.GATE_WIDTH_METERS / 2.0
 
@@ -107,7 +112,7 @@ class CourseManager:
     def save_course(self):
         try:
             data = [asdict(s) for s in self.sectors]
-            with open(self.COURSE_FILE_PATH, 'w') as f:
+            with open(self.COURSE_FILE_PATH, "w") as f:
                 json.dump(data, f, indent=4)
         except Exception as e:
             print(f"Failed to save course: {e}")
@@ -116,7 +121,7 @@ class CourseManager:
         if not os.path.exists(self.COURSE_FILE_PATH):
             return
         try:
-            with open(self.COURSE_FILE_PATH, 'r') as f:
+            with open(self.COURSE_FILE_PATH, "r") as f:
                 data = json.load(f)
                 self.sectors = [SectorPoint(**d) for d in data]
                 self.sectors.sort(key=lambda s: s.index)

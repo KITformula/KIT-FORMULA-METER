@@ -29,16 +29,17 @@ from src.models.models import (
     DashMachineInfo,
 )
 
+
 # ラップタイム整形用のヘルパー関数
 def format_lap_time(seconds: float) -> str:
     """秒数を 'M:SS.ms' (分:秒.ミリ秒2桁) 形式の文字列に変換する"""
     if seconds is None or seconds < 0:
         return "0:00.00"
-    
+
     m = int(seconds // 60)
     s = int(seconds % 60)
     ms = int((seconds - int(seconds)) * 100)
-    
+
     return f"{m}:{s:02d}.{ms:02d}"
 
 
@@ -54,7 +55,7 @@ class DashboardWidget(QWidget):
     def __init__(self, listener: WindowListener):
         super(DashboardWidget, self).__init__(None)
         self.listener = listener
-        
+
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.listener.onUpdate)
         self.timer.start(50)
@@ -98,14 +99,16 @@ class DashboardWidget(QWidget):
         mainLayout.setRowStretch(2, 0)
 
     def updateGoProBattery(self, value: int):
-        color = "#0F0" # 緑
+        color = "#0F0"  # 緑
         if value < 20:
-            color = "#F00" # 赤
+            color = "#F00"  # 赤
         elif value < 50:
-            color = "#FF0" # 黄
-            
+            color = "#FF0"  # 黄
+
         self.goproLabel.updateValueLabel(f"{value}%")
-        self.goproLabel.valueLabel.setStyleSheet(f"color: {color}; font-size: 30px; font-weight: bold;")
+        self.goproLabel.valueLabel.setStyleSheet(
+            f"color: {color}; font-size: 30px; font-weight: bold;"
+        )
 
     def handle_input(self, input_type: str) -> bool:
         return False
@@ -121,7 +124,7 @@ class DashboardWidget(QWidget):
         self.oilTempTitleValueBox.updateTempValueLabel(dashMachineInfo.oilTemp)
         self.oilTempTitleValueBox.updateOilTempWarning(dashMachineInfo.oilTemp)
         self.opsBar.updatePedalBar(dashMachineInfo.oilPress.oilPress)
-        
+
         self.fanSwitchStateTitleValueBox.updateBoolValueLabel(
             dashMachineInfo.fanEnabled
         )
@@ -130,13 +133,13 @@ class DashboardWidget(QWidget):
         self.tpsTitleValueBox.updateValueLabel(dashMachineInfo.throttlePosition)
         self.bpsFTitleValueBox.updateValueLabel(dashMachineInfo.brakePress.front)
         self.bpsRTitleValueBox.updateValueLabel(dashMachineInfo.brakePress.rear)
-        
+
         self.batteryIconValueBox.updateBatteryValueLabel(dashMachineInfo.batteryVoltage)
         self.fuelcaluculatorIconValueBox.updateFuelPercentLabel(fuel_percentage)
-        
+
         formatted_time = format_lap_time(dashMachineInfo.currentLapTime)
         self.lapTimeBox.updateValueLabel(formatted_time)
-        
+
         self.lapCountBox.updateValueLabel(dashMachineInfo.lapCount)
 
         self.deltaBox.updateDelta(dashMachineInfo.lapTimeDiff)
@@ -162,12 +165,12 @@ class DashboardWidget(QWidget):
         self.rpmLabel.setStyleSheet(
             "border: none; border-radius: 0px; font-weight: bold; color: #FFF; background-color: #000"
         )
-        
+
         self.gearLabel = GearLabel()
 
         self.waterTempTitleValueBox = TitleValueBox("Water Temp")
         self.oilTempTitleValueBox = TitleValueBox("Oil Temp")
-        
+
         self.fanSwitchStateTitleValueBox = TitleValueBox("Fan Switch")
         self.switchStateRemiderLabel = TitleValueBox(
             "SWITCH CHECK! \n1. Fan \n2. TPS MAX"
@@ -181,7 +184,7 @@ class DashboardWidget(QWidget):
         self.bpsFTitleValueBox = TitleValueBox("BPS F")
         self.bpsRTitleValueBox = TitleValueBox("BPS R")
         self.brakeBiasTitleValueBox = TitleValueBox("Brake\nBias F%")
-        
+
         self.opsBar = PedalBar("#F00", 300)
 
         self.batteryIconValueBox = IconValueBox()
@@ -196,9 +199,9 @@ class DashboardWidget(QWidget):
         self.lapTimeBox.valueLabel.setFontScale(0.55)
 
         self.lapCountBox = TitleValueBox("Lap")
-        
+
         self.deltaBox = DeltaBox("Delta")
-        
+
         self.goproLabel = TitleValueBox("GoPro Bat")
 
     def createTopGroupBox(self):
@@ -216,10 +219,10 @@ class DashboardWidget(QWidget):
     def createLeftGroupBox(self):
         self.leftGroupBox = QGroupBox()
         self.leftGroupBox.setAttribute(QtCore.Qt.WA_StyledBackground, True)
-        self.leftGroupBox.setObjectName("LeftBox") 
+        self.leftGroupBox.setObjectName("LeftBox")
 
         layout = QGridLayout()
-        
+
         layout.addWidget(self.lapTimeBox, 0, 0, 1, 2)
         layout.addWidget(self.waterTempTitleValueBox, 1, 0)
         layout.addWidget(self.oilTempTitleValueBox, 1, 1)
@@ -232,7 +235,7 @@ class DashboardWidget(QWidget):
         layout.setRowStretch(3, 1)
 
         layout.setContentsMargins(2, 2, 2, 2)
-        layout.setSpacing(2) 
+        layout.setSpacing(2)
 
         self.leftGroupBox.setLayout(layout)
 
@@ -242,8 +245,8 @@ class DashboardWidget(QWidget):
         self.centerGroupBox.setObjectName("CenterBox")
 
         layout = QGridLayout()
-        
-        layout.addWidget(self.gearLabel, 0, 0, 1, 3, QtCore.Qt.AlignTop) 
+
+        layout.addWidget(self.gearLabel, 0, 0, 1, 3, QtCore.Qt.AlignTop)
         layout.addWidget(self.rpmLabel, 1, 0, 1, 3)
         layout.addWidget(self.tpsTitleValueBox, 2, 0, 1, 3)
         layout.addWidget(self.opsBar, 3, 0, 1, 3)
@@ -261,11 +264,13 @@ class DashboardWidget(QWidget):
     def createRightGroupBox(self):
         self.rightGroupBox = QGroupBox()
         self.rightGroupBox.setAttribute(QtCore.Qt.WA_StyledBackground, True)
-        self.rightGroupBox.setObjectName("RightBox") 
+        self.rightGroupBox.setObjectName("RightBox")
 
         tpmsGridGroup = QGroupBox()
         tpmsGridGroup.setObjectName("TpmsGridGroup")
-        tpmsGridGroup.setStyleSheet("QGroupBox#TpmsGridGroup { background-color: #FFF; border: none; margin: 0px; padding: 0px; }")
+        tpmsGridGroup.setStyleSheet(
+            "QGroupBox#TpmsGridGroup { background-color: #FFF; border: none; margin: 0px; padding: 0px; }"
+        )
         tpmsGridGroup.setAttribute(QtCore.Qt.WA_StyledBackground, True)
 
         tpmsLayout = QGridLayout()
@@ -285,21 +290,23 @@ class DashboardWidget(QWidget):
 
         lapInfoContainer = QWidget()
         lapInfoContainer.setObjectName("LapInfoContainer")
-        lapInfoContainer.setStyleSheet("QWidget#LapInfoContainer { background-color: #FFF; }") 
+        lapInfoContainer.setStyleSheet(
+            "QWidget#LapInfoContainer { background-color: #FFF; }"
+        )
         lapInfoContainer.setAttribute(QtCore.Qt.WA_StyledBackground, True)
-        
+
         lapInfoLayout = QGridLayout()
         lapInfoLayout.setContentsMargins(0, 0, 0, 0)
         lapInfoLayout.setSpacing(2)
-        
+
         lapInfoLayout.addWidget(self.deltaBox, 0, 0)
         lapInfoLayout.addWidget(self.lapCountBox, 1, 0)
-        
+
         lapInfoContainer.setLayout(lapInfoLayout)
-        
+
         mainLayout.addWidget(lapInfoContainer, 0, 0)
         mainLayout.addWidget(tpmsGridGroup, 1, 0)
-        
+
         mainLayout.setRowStretch(0, 3)
         mainLayout.setRowStretch(1, 6)
 
@@ -324,10 +331,12 @@ class GoProMenuScreen(QWidget):
         super().__init__()
         self.layout = QVBoxLayout()
         self.shown_timestamp = 0.0
-        
+
         title = QLabel("GoPro Settings")
         title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet("font-size: 32px; font-weight: bold; color: #00FFFF; margin-bottom: 10px;")
+        title.setStyleSheet(
+            "font-size: 32px; font-weight: bold; color: #00FFFF; margin-bottom: 10px;"
+        )
         self.layout.addWidget(title)
 
         self.list_widget = QListWidget()
@@ -347,31 +356,35 @@ class GoProMenuScreen(QWidget):
                 border: 2px solid #00FFFF;
             }
         """)
-        
+
         self.items = [
             "1. Connect / Retry",
             "2. Disconnect",
             "3. Record START",
             "4. Record STOP",
-            "5. << BACK"
+            "5. << BACK",
         ]
         self.list_widget.addItems(self.items)
         self.list_widget.setCurrentRow(0)
-        
+
         self.layout.addWidget(self.list_widget)
 
         self.status_label = QLabel("Status: Not Connected")
         self.status_label.setAlignment(Qt.AlignCenter)
-        self.status_label.setStyleSheet("font-size: 20px; color: #AAA; border-top: 1px solid #555; padding: 10px;")
+        self.status_label.setStyleSheet(
+            "font-size: 20px; color: #AAA; border-top: 1px solid #555; padding: 10px;"
+        )
         self.layout.addWidget(self.status_label)
 
         self.battery_label = QLabel("Battery: --%")
         self.battery_label.setAlignment(Qt.AlignCenter)
-        self.battery_label.setStyleSheet("font-size: 24px; font-weight: bold; color: #AAA; padding: 10px;")
+        self.battery_label.setStyleSheet(
+            "font-size: 24px; font-weight: bold; color: #AAA; padding: 10px;"
+        )
         self.layout.addWidget(self.battery_label)
 
         self.setLayout(self.layout)
-        
+
         palette = self.palette()
         palette.setColor(self.backgroundRole(), QColor("#333"))
         self.setPalette(palette)
@@ -383,36 +396,44 @@ class GoProMenuScreen(QWidget):
 
     def update_status(self, text: str):
         self.status_label.setText(f"Status: {text}")
-        
+
         if "Connected" in text or "Ready" in text or "Recording" in text:
-            self.status_label.setStyleSheet("font-size: 20px; color: #0F0; border-top: 1px solid #555; padding: 10px;")
+            self.status_label.setStyleSheet(
+                "font-size: 20px; color: #0F0; border-top: 1px solid #555; padding: 10px;"
+            )
         elif "Error" in text or "Failed" in text:
-            self.status_label.setStyleSheet("font-size: 20px; color: #F00; border-top: 1px solid #555; padding: 10px;")
+            self.status_label.setStyleSheet(
+                "font-size: 20px; color: #F00; border-top: 1px solid #555; padding: 10px;"
+            )
         else:
-            self.status_label.setStyleSheet("font-size: 20px; color: #FF0; border-top: 1px solid #555; padding: 10px;")
+            self.status_label.setStyleSheet(
+                "font-size: 20px; color: #FF0; border-top: 1px solid #555; padding: 10px;"
+            )
 
     def update_battery(self, value: int):
-        color = "#0F0" # 緑
+        color = "#0F0"  # 緑
         if value < 20:
-            color = "#F00" # 赤
+            color = "#F00"  # 赤
         elif value < 50:
-            color = "#FF0" # 黄
-            
+            color = "#FF0"  # 黄
+
         self.battery_label.setText(f"Battery: {value}%")
-        self.battery_label.setStyleSheet(f"font-size: 24px; font-weight: bold; color: {color}; padding: 10px;")
+        self.battery_label.setStyleSheet(
+            f"font-size: 24px; font-weight: bold; color: {color}; padding: 10px;"
+        )
 
     def handle_input(self, input_type: str) -> bool:
         if time.time() - self.shown_timestamp < 0.5:
             return True
 
         current_row = self.list_widget.currentRow()
-        
+
         if input_type == "CW":
             if current_row < len(self.items) - 1:
                 self.list_widget.setCurrentRow(current_row + 1)
             else:
                 self.list_widget.setCurrentRow(0)
-            return True 
+            return True
 
         elif input_type == "CCW":
             if current_row > 0:
@@ -445,10 +466,12 @@ class LSDMenuScreen(QWidget):
     def __init__(self):
         super().__init__()
         self.layout = QVBoxLayout()
-        
+
         title = QLabel("LSD ADJUSTMENT")
         title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet("font-size: 32px; font-weight: bold; color: #FF00FF; margin-bottom: 20px;")
+        title.setStyleSheet(
+            "font-size: 32px; font-weight: bold; color: #FF00FF; margin-bottom: 20px;"
+        )
         self.layout.addWidget(title)
 
         self.current_level = 1
@@ -457,7 +480,9 @@ class LSDMenuScreen(QWidget):
 
         self.level_label = QLabel(f"LEVEL: {self.current_level}")
         self.level_label.setAlignment(Qt.AlignCenter)
-        self.level_label.setStyleSheet("font-size: 80px; font-weight: bold; color: white;")
+        self.level_label.setStyleSheet(
+            "font-size: 80px; font-weight: bold; color: white;"
+        )
         self.layout.addWidget(self.level_label)
 
         hint_label = QLabel("Rotary: Adjust Level\nPush: BACK")
@@ -466,7 +491,7 @@ class LSDMenuScreen(QWidget):
         self.layout.addWidget(hint_label)
 
         self.setLayout(self.layout)
-        
+
         palette = self.palette()
         palette.setColor(self.backgroundRole(), QColor("#333"))
         self.setPalette(palette)
@@ -478,7 +503,7 @@ class LSDMenuScreen(QWidget):
                 self.current_level += 1
                 self._update_display()
                 self.lsdLevelChanged.emit(self.current_level)
-            return True 
+            return True
 
         elif input_type == "CCW":
             if self.current_level > self.min_level:
@@ -506,10 +531,12 @@ class GpsSetScreen(QWidget):
         super().__init__()
         self.layout = QVBoxLayout()
         self.is_processing = False
-        
+
         title = QLabel("GPS START LINE SETTING")
         title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet("font-size: 32px; font-weight: bold; color: cyan; margin-bottom: 20px;")
+        title.setStyleSheet(
+            "font-size: 32px; font-weight: bold; color: cyan; margin-bottom: 20px;"
+        )
         self.layout.addWidget(title)
 
         self.latBox = TitleValueBox("Latitude")
@@ -523,12 +550,14 @@ class GpsSetScreen(QWidget):
         infoLayout.addWidget(self.latBox, 0, 0)
         infoLayout.addWidget(self.lonBox, 0, 1)
         infoLayout.addWidget(self.satsBox, 1, 0, 1, 2)
-        
+
         self.layout.addLayout(infoLayout)
 
         self.message_label = QLabel("START LINE SET!")
         self.message_label.setAlignment(Qt.AlignCenter)
-        self.message_label.setStyleSheet("font-size: 40px; font-weight: bold; color: #00FF00; background-color: rgba(0, 0, 0, 150); border-radius: 10px; padding: 10px;")
+        self.message_label.setStyleSheet(
+            "font-size: 40px; font-weight: bold; color: #00FF00; background-color: rgba(0, 0, 0, 150); border-radius: 10px; padding: 10px;"
+        )
         self.message_label.hide()
         self.layout.addWidget(self.message_label)
 
@@ -538,7 +567,7 @@ class GpsSetScreen(QWidget):
         self.layout.addWidget(self.hint_label)
 
         self.setLayout(self.layout)
-        
+
         palette = self.palette()
         palette.setColor(self.backgroundRole(), QColor("#333"))
         self.setPalette(palette)
@@ -570,8 +599,8 @@ class GpsSetScreen(QWidget):
             self.hint_label.hide()
             self.message_label.show()
             QTimer.singleShot(1500, self._finish_and_back)
-            return True 
-        
+            return True
+
         elif input_type in ["CW", "CCW"]:
             self.requestBack.emit()
             return True
@@ -584,6 +613,7 @@ class GpsSetScreen(QWidget):
         self.is_processing = False
         self.requestBack.emit()
 
+
 # ★★★ 新規: 燃料リセット画面 ★★★
 class FuelResetScreen(QWidget):
     requestReset = pyqtSignal()
@@ -592,20 +622,26 @@ class FuelResetScreen(QWidget):
     def __init__(self):
         super().__init__()
         self.layout = QVBoxLayout()
-        
+
         title = QLabel("FUEL INTEGRATOR RESET")
         title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet("font-size: 32px; font-weight: bold; color: orange; margin-bottom: 20px;")
+        title.setStyleSheet(
+            "font-size: 32px; font-weight: bold; color: orange; margin-bottom: 20px;"
+        )
         self.layout.addWidget(title)
 
         self.fuel_label = QLabel("Current: -- %")
         self.fuel_label.setAlignment(Qt.AlignCenter)
-        self.fuel_label.setStyleSheet("font-size: 60px; font-weight: bold; color: white;")
+        self.fuel_label.setStyleSheet(
+            "font-size: 60px; font-weight: bold; color: white;"
+        )
         self.layout.addWidget(self.fuel_label)
 
         self.message_label = QLabel("RESET COMPLETE")
         self.message_label.setAlignment(Qt.AlignCenter)
-        self.message_label.setStyleSheet("font-size: 40px; font-weight: bold; color: #00FF00; background-color: rgba(0, 0, 0, 150); border-radius: 10px; padding: 10px;")
+        self.message_label.setStyleSheet(
+            "font-size: 40px; font-weight: bold; color: #00FF00; background-color: rgba(0, 0, 0, 150); border-radius: 10px; padding: 10px;"
+        )
         self.message_label.hide()
         self.layout.addWidget(self.message_label)
 
@@ -615,7 +651,7 @@ class FuelResetScreen(QWidget):
         self.layout.addWidget(self.hint_label)
 
         self.setLayout(self.layout)
-        
+
         palette = self.palette()
         palette.setColor(self.backgroundRole(), QColor("#333"))
         self.setPalette(palette)
@@ -630,7 +666,8 @@ class FuelResetScreen(QWidget):
         self.fuel_label.setText(f"Current: {int(percent)} %")
 
     def handle_input(self, input_type: str) -> bool:
-        if self.message_label.isVisible(): return True
+        if self.message_label.isVisible():
+            return True
 
         if input_type == "ENTER":
             self.requestReset.emit()
@@ -656,20 +693,26 @@ class MileageScreen(QWidget):
     def __init__(self):
         super().__init__()
         self.layout = QVBoxLayout()
-        
+
         title = QLabel("MILEAGE INFO")
         title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet("font-size: 32px; font-weight: bold; color: #00BFFF; margin-bottom: 20px;")
+        title.setStyleSheet(
+            "font-size: 32px; font-weight: bold; color: #00BFFF; margin-bottom: 20px;"
+        )
         self.layout.addWidget(title)
 
         self.today_label = QLabel("Today: --.- km")
         self.today_label.setAlignment(Qt.AlignCenter)
-        self.today_label.setStyleSheet("font-size: 48px; font-weight: bold; color: white;")
+        self.today_label.setStyleSheet(
+            "font-size: 48px; font-weight: bold; color: white;"
+        )
         self.layout.addWidget(self.today_label)
 
         self.total_label = QLabel("Total: ----.- km")
         self.total_label.setAlignment(Qt.AlignCenter)
-        self.total_label.setStyleSheet("font-size: 48px; font-weight: bold; color: #AAA;")
+        self.total_label.setStyleSheet(
+            "font-size: 48px; font-weight: bold; color: #AAA;"
+        )
         self.layout.addWidget(self.total_label)
 
         hint_label = QLabel("Rotary: BACK")
@@ -678,7 +721,7 @@ class MileageScreen(QWidget):
         self.layout.addWidget(hint_label)
 
         self.setLayout(self.layout)
-        
+
         palette = self.palette()
         palette.setColor(self.backgroundRole(), QColor("#333"))
         self.setPalette(palette)
@@ -703,12 +746,14 @@ class GpsSectorScreen(QWidget):
     def __init__(self):
         super().__init__()
         self.layout = QVBoxLayout()
-        self.current_sector = 1 # 現在選択中のセクター
+        self.current_sector = 1  # 現在選択中のセクター
         self.is_processing = False
-        
+
         title = QLabel("GPS SECTOR SETTINGS")
         title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet("font-size: 32px; font-weight: bold; color: #FF00FF; margin-bottom: 10px;")
+        title.setStyleSheet(
+            "font-size: 32px; font-weight: bold; color: #FF00FF; margin-bottom: 10px;"
+        )
         self.layout.addWidget(title)
 
         # GPS情報表示部 (上段)
@@ -716,10 +761,10 @@ class GpsSectorScreen(QWidget):
         self.latBox = TitleValueBox("Latitude")
         self.lonBox = TitleValueBox("Longitude")
         self.satsBox = TitleValueBox("Sats/Quality")
-        
+
         for box in [self.latBox, self.lonBox, self.satsBox]:
             box.valueLabel.setFontScale(0.3)
-            
+
         infoLayout.addWidget(self.latBox, 0, 0)
         infoLayout.addWidget(self.lonBox, 0, 1)
         infoLayout.addWidget(self.satsBox, 1, 0, 1, 2)
@@ -728,24 +773,30 @@ class GpsSectorScreen(QWidget):
         # セクター選択部 (中段)
         self.sectorLabel = QLabel("TARGET: SECTOR 1")
         self.sectorLabel.setAlignment(Qt.AlignCenter)
-        self.sectorLabel.setStyleSheet("font-size: 50px; font-weight: bold; color: yellow; margin: 20px;")
+        self.sectorLabel.setStyleSheet(
+            "font-size: 50px; font-weight: bold; color: yellow; margin: 20px;"
+        )
         self.layout.addWidget(self.sectorLabel)
 
         # 設定完了メッセージ (オーバーレイ的扱い)
         self.message_label = QLabel("SET!")
         self.message_label.setAlignment(Qt.AlignCenter)
-        self.message_label.setStyleSheet("font-size: 60px; font-weight: bold; color: #00FF00; background-color: rgba(0, 0, 0, 200); border-radius: 10px;")
+        self.message_label.setStyleSheet(
+            "font-size: 60px; font-weight: bold; color: #00FF00; background-color: rgba(0, 0, 0, 200); border-radius: 10px;"
+        )
         self.message_label.hide()
         self.layout.addWidget(self.message_label)
 
         # 操作説明 (下段)
-        self.hint_label = QLabel("Rotary: Select Sector\nPush: SET POS\n") # ★修正: BACKの操作を追加したいが…
+        self.hint_label = QLabel(
+            "Rotary: Select Sector\nPush: SET POS\n"
+        )  # ★修正: BACKの操作を追加したいが…
         self.hint_label.setAlignment(Qt.AlignCenter)
         self.hint_label.setStyleSheet("font-size: 20px; color: #AAA; margin-top: 10px;")
         self.layout.addWidget(self.hint_label)
 
         self.setLayout(self.layout)
-        
+
         palette = self.palette()
         palette.setColor(self.backgroundRole(), QColor("#333"))
         self.setPalette(palette)
@@ -772,11 +823,11 @@ class GpsSectorScreen(QWidget):
             return True
 
         if input_type == "CW":
-            if self.current_sector < 10: # 最大10セクターまで
+            if self.current_sector < 10:  # 最大10セクターまで
                 self.current_sector += 1
                 self.sectorLabel.setText(f"TARGET: SECTOR {self.current_sector}")
-            elif self.current_sector == 10: # 10の次はBACK
-                self.current_sector = 11 # 11 = BACK
+            elif self.current_sector == 10:  # 10の次はBACK
+                self.current_sector = 11  # 11 = BACK
                 self.sectorLabel.setText("<< BACK")
             return True
 
@@ -796,14 +847,14 @@ class GpsSectorScreen(QWidget):
             # セクター設定処理
             self.is_processing = True
             self.requestSetSector.emit(self.current_sector)
-            
+
             self.hint_label.hide()
             self.message_label.setText(f"SECTOR {self.current_sector}\nSET!")
             self.message_label.show()
-            
+
             QTimer.singleShot(1500, self._finish_processing)
             return True
-            
+
         return False
 
     def _finish_processing(self):
@@ -820,16 +871,18 @@ class SettingsScreen(QWidget):
     requestOpenLSDMenu = pyqtSignal()
     requestLapTimeSetup = pyqtSignal()
     requestOpenMileageMenu = pyqtSignal()
-    requestOpenGpsSectorMenu = pyqtSignal() # ★新規: GPS Sectorメニュー用シグナル
+    requestOpenGpsSectorMenu = pyqtSignal()  # ★新規: GPS Sectorメニュー用シグナル
     requestExit = pyqtSignal()
 
     def __init__(self):
         super().__init__()
         self.layout = QVBoxLayout()
-        
+
         title = QLabel("SETTINGS MENU")
         title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet("font-size: 32px; font-weight: bold; color: yellow; margin-bottom: 10px;")
+        title.setStyleSheet(
+            "font-size: 32px; font-weight: bold; color: yellow; margin-bottom: 10px;"
+        )
         self.layout.addWidget(title)
 
         self.list_widget = QListWidget()
@@ -849,23 +902,23 @@ class SettingsScreen(QWidget):
                 border: 2px solid yellow;
             }
         """)
-        
+
         self.items = [
             "1. Set GPS Start Line >",
-            "2. Fuel Reset Menu >", 
+            "2. Fuel Reset Menu >",
             "3. GoPro Menu >",
             "4. LSD Adjustment >",
             "5. Lap Time Settings",
-            "6. GPS Sector Settings >", # ★新規: 項目追加
+            "6. GPS Sector Settings >",  # ★新規: 項目追加
             "7. Mileage Info >",
-            "8. EXIT"
+            "8. EXIT",
         ]
         self.list_widget.addItems(self.items)
         self.list_widget.setCurrentRow(0)
-        
+
         self.layout.addWidget(self.list_widget)
         self.setLayout(self.layout)
-        
+
         palette = self.palette()
         palette.setColor(self.backgroundRole(), QColor("#333"))
         self.setPalette(palette)
@@ -873,13 +926,13 @@ class SettingsScreen(QWidget):
 
     def handle_input(self, input_type: str) -> bool:
         current_row = self.list_widget.currentRow()
-        
+
         if input_type == "CW":
             if current_row < len(self.items) - 1:
                 self.list_widget.setCurrentRow(current_row + 1)
             else:
                 self.list_widget.setCurrentRow(0)
-            return True 
+            return True
 
         elif input_type == "CCW":
             if current_row > 0:
@@ -892,7 +945,7 @@ class SettingsScreen(QWidget):
             if current_row == 0:
                 self.requestOpenGpsMenu.emit()
             elif current_row == 1:
-                self.requestOpenFuelMenu.emit() 
+                self.requestOpenFuelMenu.emit()
             elif current_row == 2:
                 self.requestOpenGoProMenu.emit()
             elif current_row == 3:
@@ -900,7 +953,7 @@ class SettingsScreen(QWidget):
             elif current_row == 4:
                 self.requestLapTimeSetup.emit()
             elif current_row == 5:
-                self.requestOpenGpsSectorMenu.emit() # ★新規
+                self.requestOpenGpsSectorMenu.emit()  # ★新規
             elif current_row == 6:
                 self.requestOpenMileageMenu.emit()
             elif current_row == 7:
@@ -920,7 +973,7 @@ class MainDisplayWindow(QDialog):
     requestGoProRecStop = pyqtSignal()
     requestLapTimeSetup = pyqtSignal()
     requestLsdChange = pyqtSignal(int)
-    requestSetSector = pyqtSignal(int) # ★新規: セクター設定用シグナル
+    requestSetSector = pyqtSignal(int)  # ★新規: セクター設定用シグナル
 
     def __init__(self, listener: WindowListener):
         super(MainDisplayWindow, self).__init__(None)
@@ -929,14 +982,14 @@ class MainDisplayWindow(QDialog):
         palette.setColor(self.backgroundRole(), QColor("#000"))
         palette.setColor(self.foregroundRole(), QColor("#FFF"))
         self.setPalette(palette)
-        
+
         self.listener = listener
         self.stack = QStackedWidget()
-        
+
         # 1. Dashboard
         self.dashboard = DashboardWidget(listener)
         self.dashboard.requestSetStartLine.connect(self.requestSetStartLine.emit)
-        
+
         # 2. Settings (Main Menu)
         self.settings = SettingsScreen()
         self.settings.requestOpenGpsMenu.connect(self.open_gps_menu)
@@ -945,9 +998,11 @@ class MainDisplayWindow(QDialog):
         self.settings.requestOpenLSDMenu.connect(self.open_lsd_menu)
         self.settings.requestLapTimeSetup.connect(self.requestLapTimeSetup.emit)
         self.settings.requestOpenMileageMenu.connect(self.open_mileage_menu)
-        self.settings.requestOpenGpsSectorMenu.connect(self.open_gps_sector_menu) # ★新規
+        self.settings.requestOpenGpsSectorMenu.connect(
+            self.open_gps_sector_menu
+        )  # ★新規
         self.settings.requestExit.connect(self.return_to_dashboard)
-        
+
         # 3. GoPro Menu
         self.gopro_menu = GoProMenuScreen()
         self.gopro_menu.requestConnect.connect(self.requestGoProConnect.emit)
@@ -965,7 +1020,7 @@ class MainDisplayWindow(QDialog):
         self.gps_screen = GpsSetScreen()
         self.gps_screen.requestSetLine.connect(self.requestSetStartLine.emit)
         self.gps_screen.requestBack.connect(self.return_to_settings)
-        
+
         # 6. Fuel Reset Screen
         self.fuel_screen = FuelResetScreen()
         self.fuel_screen.requestReset.connect(self.requestResetFuel.emit)
@@ -978,17 +1033,19 @@ class MainDisplayWindow(QDialog):
         # 8. GPS Sector Screen (★新規)
         self.gps_sector_screen = GpsSectorScreen()
         self.gps_sector_screen.requestBack.connect(self.return_to_settings)
-        self.gps_sector_screen.requestSetSector.connect(self.requestSetSector.emit) # シグナル転送
+        self.gps_sector_screen.requestSetSector.connect(
+            self.requestSetSector.emit
+        )  # シグナル転送
 
-        self.stack.addWidget(self.dashboard)   # Index 0
-        self.stack.addWidget(self.settings)    # Index 1
+        self.stack.addWidget(self.dashboard)  # Index 0
+        self.stack.addWidget(self.settings)  # Index 1
         self.stack.addWidget(self.gopro_menu)  # Index 2
-        self.stack.addWidget(self.lsd_menu)    # Index 3
+        self.stack.addWidget(self.lsd_menu)  # Index 3
         self.stack.addWidget(self.gps_screen)  # Index 4
-        self.stack.addWidget(self.fuel_screen) # Index 5
-        self.stack.addWidget(self.mileage_screen) # Index 6
-        self.stack.addWidget(self.gps_sector_screen) # Index 7
-        
+        self.stack.addWidget(self.fuel_screen)  # Index 5
+        self.stack.addWidget(self.mileage_screen)  # Index 6
+        self.stack.addWidget(self.gps_sector_screen)  # Index 7
+
         layout = QGridLayout()
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.stack)
@@ -1005,14 +1062,14 @@ class MainDisplayWindow(QDialog):
 
     def open_gps_menu(self):
         self.stack.setCurrentWidget(self.gps_screen)
-    
+
     def open_fuel_menu(self):
         self.stack.setCurrentWidget(self.fuel_screen)
 
     def open_mileage_menu(self):
         self.stack.setCurrentWidget(self.mileage_screen)
 
-    def open_gps_sector_menu(self): # ★新規
+    def open_gps_sector_menu(self):  # ★新規
         self.stack.setCurrentWidget(self.gps_sector_screen)
 
     def return_to_settings(self):
@@ -1025,12 +1082,20 @@ class MainDisplayWindow(QDialog):
         self.dashboard.updateGoProBattery(value)
         self.gopro_menu.update_battery(value)
 
-    def updateDashboard(self, dashMachineInfo, fuel_percentage, tpms_data, gps_data, daily_km=0.0, total_km=0.0): 
+    def updateDashboard(
+        self,
+        dashMachineInfo,
+        fuel_percentage,
+        tpms_data,
+        gps_data,
+        daily_km=0.0,
+        total_km=0.0,
+    ):
         current_widget = self.stack.currentWidget()
 
         if current_widget == self.dashboard:
             self.dashboard.updateDashboard(dashMachineInfo, fuel_percentage, tpms_data)
-        
+
         elif current_widget == self.gps_screen:
             self.gps_screen.update_data(gps_data)
 
@@ -1039,7 +1104,7 @@ class MainDisplayWindow(QDialog):
 
         elif current_widget == self.mileage_screen:
             self.mileage_screen.update_distance(daily_km, total_km)
-            
+
         elif current_widget == self.gps_sector_screen:
             self.gps_sector_screen.update_gps_data(gps_data)
 
@@ -1054,7 +1119,7 @@ class MainDisplayWindow(QDialog):
 
     def _dispatch_input(self, input_type, direction=0):
         current_widget = self.stack.currentWidget()
-        
+
         if hasattr(current_widget, "handle_input"):
             consumed = current_widget.handle_input(input_type)
             if consumed:

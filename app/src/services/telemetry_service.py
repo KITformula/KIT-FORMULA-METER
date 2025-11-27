@@ -2,11 +2,11 @@ from src.telemetry.google_sheets_sender import GoogleSheetsSender
 from src.logger.csv_logger import CsvLogger
 from src.mileage.mileage_tracker import MileageTracker
 
+
 class TelemetryService:
     def __init__(self):
         self.sender = GoogleSheetsSender(
-            json_keyfile="service_account.json",
-            spreadsheet_name="Formula_Log_2024"
+            json_keyfile="service_account.json", spreadsheet_name="Formula_Log_2024"
         )
         self.logger = CsvLogger(base_dir="logs")
         self.mileage_tracker = MileageTracker()
@@ -17,7 +17,7 @@ class TelemetryService:
         if dash_info.rpm >= 500:
             if not self.logger.is_active:
                 self.logger.start()
-            
+
             fl_temp = tpms_data.get("FL", {}).get("temp_c", 0.0)
             fr_temp = tpms_data.get("FR", {}).get("temp_c", 0.0)
             rl_temp = tpms_data.get("RL", {}).get("temp_c", 0.0)
@@ -29,7 +29,10 @@ class TelemetryService:
                 water_temp=int(dash_info.waterTemp),
                 oil_press=dash_info.oilPress.oilPress,
                 gear=int(dash_info.gearVoltage.gearType),
-                fl_temp=fl_temp, fr_temp=fr_temp, rl_temp=rl_temp, rr_temp=rr_temp
+                fl_temp=fl_temp,
+                fr_temp=fr_temp,
+                rl_temp=rl_temp,
+                rr_temp=rr_temp,
             )
         else:
             if self.logger.is_active:
@@ -38,7 +41,9 @@ class TelemetryService:
         # Google Sheets Sending
         if dash_info.lapCount > self.last_processed_lap:
             if dash_info.lapCount > 1:
-                print(f"★ Lap Update Detected: {self.last_processed_lap} -> {dash_info.lapCount}. Sending to Sheets...")
+                print(
+                    f"★ Lap Update Detected: {self.last_processed_lap} -> {dash_info.lapCount}. Sending to Sheets..."
+                )
                 self.sender.send(dash_info, fuel_percent, tpms_data)
             self.last_processed_lap = dash_info.lapCount
 

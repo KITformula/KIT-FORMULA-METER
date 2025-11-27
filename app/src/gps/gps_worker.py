@@ -11,6 +11,7 @@ from PyQt5.QtCore import QObject, pyqtSignal
 # ヘルパー関数
 # ===============================================
 
+
 def nmea_to_decimal_degrees(nmea_val, direction):
     try:
         if not nmea_val:
@@ -28,6 +29,7 @@ def nmea_to_decimal_degrees(nmea_val, direction):
     except ValueError:
         return None
 
+
 def parse_nmea_time(time_str):
     if not time_str or "." not in time_str:
         return None
@@ -42,6 +44,7 @@ def parse_nmea_time(time_str):
         )
     except Exception:
         return None
+
 
 def calculate_distance_km(lat1, lon1, lat2, lon2):
     R = 6371.0
@@ -61,6 +64,7 @@ def calculate_distance_km(lat1, lon1, lat2, lon2):
     distance = R * c
     return distance
 
+
 def calculate_distance_meters(lat1, lon1, lat2, lon2):
     return calculate_distance_km(lat1, lon1, lat2, lon2) * 1000.0
 
@@ -68,6 +72,7 @@ def calculate_distance_meters(lat1, lon1, lat2, lon2):
 # ===============================================
 # GPS Worker クラス
 # ===============================================
+
 
 class GpsWorker(QObject):
     data_received = pyqtSignal(dict)
@@ -115,50 +120,51 @@ class GpsWorker(QObject):
     def _run_mock(self):
         """デバッグ用: 円を描いて走行するデータを生成"""
         print("★ GPS Worker: Mock Mode Started")
-        
+
         # 基準点 (適当なサーキットの座標など)
         center_lat = 35.3700
         center_lon = 138.9285
         radius_meters = 200.0
         speed_kmh = 60.0
-        
+
         # 角度 (ラジアン)
         angle = 0.0
-        
+
         # 0.1秒ごとに更新 (10Hz)
         interval = 0.1
-        
+
         while self._running:
             # 座標計算 (簡易的)
             # 緯度1度≒111km, 経度1度≒91km
             lat_offset = (radius_meters * math.sin(angle)) / 111000.0
             lon_offset = (radius_meters * math.cos(angle)) / 91000.0
-            
+
             current_lat = center_lat + lat_offset
             current_lon = center_lon + lon_offset
-            
+
             # 方位計算 (接線方向)
             # 進行方向は反時計回りとする -> 接線角度 = 現在角度 + 90度
             heading_deg = math.degrees(angle) + 90.0
-            if heading_deg >= 360: heading_deg -= 360
-            
+            if heading_deg >= 360:
+                heading_deg -= 360
+
             # データの更新
             self.last_known_data["latitude"] = current_lat
             self.last_known_data["longitude"] = current_lon
             self.last_known_data["heading"] = heading_deg
             self.last_known_data["speed_kph"] = speed_kmh
-            self.last_known_data["quality"] = 1 # Fixあり
+            self.last_known_data["quality"] = 1  # Fixあり
             self.last_known_data["sats"] = 12
             self.last_known_data["status"] = "A"
-            
+
             # 距離計算
-            dist = (speed_kmh / 3600.0) * interval # km
+            dist = (speed_kmh / 3600.0) * interval  # km
             self.total_distance_km += dist
             self.last_known_data["total_distance_km"] = self.total_distance_km
-            
+
             # 送信
             self.data_received.emit(self.last_known_data.copy())
-            
+
             # 角度を進める
             # 角速度 w = v / r
             v_ms = speed_kmh / 3.6
@@ -166,23 +172,23 @@ class GpsWorker(QObject):
             angle += w * interval
             if angle > 2 * math.pi:
                 angle -= 2 * math.pi
-                
+
             time.sleep(interval)
-            
+
         print("GPS Mock Finished")
 
     def _run_serial(self):
         """本番用: シリアルポートから読み込み (自動再接続機能付き)"""
         print(f"GPS Worker: Starting connection loop for {self.port}...")
-        
+
         while self._running:
             try:
                 # 1. シリアルポートを開く (接続試行)
                 self.ser = serial.Serial(self.port, self.baudrate, timeout=1.0)
                 print(f"GPS: シリアルポート {self.port} 接続成功。受信開始。")
-                
+
                 # 接続成功したらエラーをクリア通知（必要であれば）
-                # self.error_occurred.emit("GPS Connected") 
+                # self.error_occurred.emit("GPS Connected")
 
                 raw_line_count = 0
 
@@ -190,11 +196,13 @@ class GpsWorker(QObject):
                 while self._running and self.ser.is_open:
                     try:
                         # データ読み込み
-                        line = self.ser.readline().decode("ascii", errors="ignore").strip()
-                        
+                        line = (
+                            self.ser.readline().decode("ascii", errors="ignore").strip()
+                        )
+
                         if not line:
                             continue
-                        
+
                         # 最初の数行だけログに出して動作確認しやすくする
                         if raw_line_count < 5:
                             print(f"GPS Raw: {line}")
@@ -208,7 +216,7 @@ class GpsWorker(QObject):
                     except serial.SerialException as se:
                         # 読み込み中の切断エラー等 -> 内部ループを抜けて再接続へ
                         print(f"GPS切断検知 (Read Error): {se}")
-                        break 
+                        break
                     except Exception:
                         # パースエラーなどは無視して読み込み継続
                         pass
@@ -233,9 +241,8 @@ class GpsWorker(QObject):
             # 3. 再接続待機 (停止フラグが立っていない場合のみ)
             if self._running:
                 time.sleep(2.0)
-        
+
         print("GPS Worker スレッドを終了します。")
-        
 
     def _update_distance_and_emit(self):
         """距離計算とシグナル発行（本番用）"""
@@ -244,17 +251,21 @@ class GpsWorker(QObject):
         quality = self.last_known_data.get("quality", 0)
         status = self.last_known_data.get("status", "V")
 
-        is_valid = (quality > 0 or status == "A") and (current_lat != 0.0 or current_lon != 0.0)
+        is_valid = (quality > 0 or status == "A") and (
+            current_lat != 0.0 or current_lon != 0.0
+        )
 
         if is_valid:
             if self.last_valid_latitude != 0.0 or self.last_valid_longitude != 0.0:
                 diff = calculate_distance_km(
-                    self.last_valid_latitude, self.last_valid_longitude,
-                    current_lat, current_lon
+                    self.last_valid_latitude,
+                    self.last_valid_longitude,
+                    current_lat,
+                    current_lon,
                 )
                 if diff < 0.5:
                     self.total_distance_km += diff
-            
+
             self.last_valid_latitude = current_lat
             self.last_valid_longitude = current_lon
 
@@ -264,7 +275,8 @@ class GpsWorker(QObject):
     def parse_nmea_line(self, line):
         # (既存のコードと同じ内容)
         try:
-            if "$" not in line: return False
+            if "$" not in line:
+                return False
             sentence_part = line[line.find("$") :]
             parts = sentence_part.split("*")[0].split(",")
             sentence_type = parts[0]
@@ -281,11 +293,15 @@ class GpsWorker(QObject):
 
                     self.last_known_data["time"] = parse_nmea_time(time_str)
                     if lat_str and lon_str:
-                        self.last_known_data["latitude"] = nmea_to_decimal_degrees(lat_str, lat_dir)
-                        self.last_known_data["longitude"] = nmea_to_decimal_degrees(lon_str, lon_dir)
+                        self.last_known_data["latitude"] = nmea_to_decimal_degrees(
+                            lat_str, lat_dir
+                        )
+                        self.last_known_data["longitude"] = nmea_to_decimal_degrees(
+                            lon_str, lon_dir
+                        )
                     self.last_known_data["quality"] = int(q_str) if q_str else 0
                     self.last_known_data["sats"] = int(sats_str) if sats_str else 0
-                    
+
                     if self.last_known_data["quality"] > 0:
                         self.last_known_data["status"] = "A"
                     else:
@@ -305,8 +321,12 @@ class GpsWorker(QObject):
                     self.last_known_data["time"] = parse_nmea_time(time_str)
                     self.last_known_data["status"] = status_str
                     if lat_str and lon_str:
-                        self.last_known_data["latitude"] = nmea_to_decimal_degrees(lat_str, lat_dir)
-                        self.last_known_data["longitude"] = nmea_to_decimal_degrees(lon_str, lon_dir)
+                        self.last_known_data["latitude"] = nmea_to_decimal_degrees(
+                            lat_str, lat_dir
+                        )
+                        self.last_known_data["longitude"] = nmea_to_decimal_degrees(
+                            lon_str, lon_dir
+                        )
 
                     track_angle = parts[8]
                     if track_angle:
@@ -316,8 +336,13 @@ class GpsWorker(QObject):
                         self.last_known_data["quality"] = 1
                     elif status_str == "V":
                         self.last_known_data["quality"] = 0
-                        
-                    if status_str == 'A' and not self.is_time_synced and time_str and date_str:
+
+                    if (
+                        status_str == "A"
+                        and not self.is_time_synced
+                        and time_str
+                        and date_str
+                    ):
                         self._sync_system_time(date_str, time_str)
                     return True
 
@@ -338,15 +363,18 @@ class GpsWorker(QObject):
 
     def _sync_system_time(self, date_str, time_str):
         # (既存のコードと同じ内容、ただしデバッグ時は実行しないガードを入れると良い)
-        if self.debug_mode: return
+        if self.debug_mode:
+            return
         try:
             if len(date_str) == 6:
                 day, month, year = date_str[0:2], date_str[2:4], "20" + date_str[4:6]
-            else: return
+            else:
+                return
             if len(time_str) >= 6:
                 hour, minute, second = time_str[0:2], time_str[2:4], time_str[4:6]
-            else: return
-            
+            else:
+                return
+
             date_cmd = f"{year}-{month}-{day} {hour}:{minute}:{second}"
             print(f"GPS Sync: {date_cmd}")
             subprocess.run(["sudo", "date", "-u", "-s", date_cmd], check=True)

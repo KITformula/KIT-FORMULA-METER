@@ -9,9 +9,10 @@ logger = logging.getLogger(__name__)
 
 # --- GoPro UUIDs ---
 COMMAND_REQ_UUID = "b5f90072-aa8d-11e3-9046-0002a5d5c51b"
-CMD_SHUTTER_ON  = bytearray([0x03, 0x01, 0x01, 0x01])
+CMD_SHUTTER_ON = bytearray([0x03, 0x01, 0x01, 0x01])
 CMD_SHUTTER_OFF = bytearray([0x03, 0x01, 0x01, 0x00])
 UUID_BATTERY_LEVEL = "00002a19-0000-1000-8000-00805f9b34fb"
+
 
 class GoProWorker(QObject):
     # GUIへの通知用シグナル
@@ -23,7 +24,7 @@ class GoProWorker(QObject):
         super().__init__()
         self.target_address = None
         self.ignore_addresses = set()
-        
+
         self.loop = None
         self.thread = None
         self._keep_running = False
@@ -32,11 +33,11 @@ class GoProWorker(QObject):
     def start_connection(self):
         if self.thread and self.thread.is_alive():
             return
-        
+
         self._keep_running = True
         self.target_address = None
         self.ignore_addresses.clear()
-        
+
         self.thread = threading.Thread(target=self._run_async_loop, daemon=True)
         self.thread.start()
 
@@ -44,18 +45,22 @@ class GoProWorker(QObject):
         """GUIから呼ばれる: 処理を停止"""
         # ▼ ログ追加: ボタンが効いているか確認しやすくする
         logger.info(">>> GoProWorker: STOP SIGNAL RECEIVED <<<")
-        
+
         self._keep_running = False
         if self.loop:
             self.loop.call_soon_threadsafe(self._command_queue.put_nowait, None)
 
     def send_command_record_start(self):
         if self.loop:
-            self.loop.call_soon_threadsafe(self._command_queue.put_nowait, "RECORD_START")
+            self.loop.call_soon_threadsafe(
+                self._command_queue.put_nowait, "RECORD_START"
+            )
 
     def send_command_record_stop(self):
         if self.loop:
-            self.loop.call_soon_threadsafe(self._command_queue.put_nowait, "RECORD_STOP")
+            self.loop.call_soon_threadsafe(
+                self._command_queue.put_nowait, "RECORD_STOP"
+            )
 
     def _run_async_loop(self):
         self.loop = asyncio.new_event_loop()
@@ -70,7 +75,9 @@ class GoProWorker(QObject):
                 tasks = asyncio.all_tasks(self.loop)
                 for task in tasks:
                     task.cancel()
-                self.loop.run_until_complete(asyncio.gather(*tasks, return_exceptions=True))
+                self.loop.run_until_complete(
+                    asyncio.gather(*tasks, return_exceptions=True)
+                )
             except Exception:
                 pass
             self.loop.close()
@@ -95,8 +102,10 @@ class GoProWorker(QObject):
                     try:
                         # ▼ 修正: タイムアウトを 8.0 -> 3.0 に短縮してレスポンス向上
                         device = await BleakScanner.find_device_by_filter(
-                            lambda d, ad: d.name and "GoPro" in d.name and d.address not in self.ignore_addresses,
-                            timeout=3.0 
+                            lambda d, ad: d.name
+                            and "GoPro" in d.name
+                            and d.address not in self.ignore_addresses,
+                            timeout=3.0,
                         )
                     except asyncio.TimeoutError:
                         device = None
@@ -108,11 +117,11 @@ class GoProWorker(QObject):
                         self.status_changed.emit("Not Found / Retrying")
                         if self.ignore_addresses:
                             logger.info(f"Ignored addresses: {self.ignore_addresses}")
-                        
+
                         # ▼ 修正: 待機時間を 2.0 -> 1.0 に短縮
                         await asyncio.sleep(1.0)
                         continue
-                    
+
                     self.target_address = device.address
                     self.status_changed.emit(f"Found: {device.name}")
                     logger.info(f"Found GoPro: {self.target_address}")
@@ -121,8 +130,12 @@ class GoProWorker(QObject):
                 # 2. 接続試行
                 # -------------------------------------------------
                 self.status_changed.emit("Connecting...")
-                
-                async with BleakClient(self.target_address, timeout=20.0, disconnected_callback=self._on_disconnect) as client:
+
+                async with BleakClient(
+                    self.target_address,
+                    timeout=20.0,
+                    disconnected_callback=self._on_disconnect,
+                ) as client:
                     if not client.is_connected:
                         raise Exception("Connection failed (is_connected=False)")
 
@@ -137,13 +150,13 @@ class GoProWorker(QObject):
                     try:
                         bat_val = await client.read_gatt_char(UUID_BATTERY_LEVEL)
                         bat_percent = int(bat_val[0])
-                        
+
                         self.status_changed.emit(f"Connected! Bat:{bat_percent}%")
                         self.battery_changed.emit(bat_percent)
                         self.connection_success.emit(True)
-                        
+
                         self.ignore_addresses.clear()
-                        
+
                     except Exception as e:
                         self.status_changed.emit("Auth Failed")
                         raise Exception(f"Authentication/Read Failed: {e}")
@@ -154,7 +167,9 @@ class GoProWorker(QObject):
                     logger.info("Entered command loop")
                     while self._keep_running and client.is_connected:
                         try:
-                            cmd = await asyncio.wait_for(self._command_queue.get(), timeout=5.0)
+                            cmd = await asyncio.wait_for(
+                                self._command_queue.get(), timeout=5.0
+                            )
 
                             if cmd is None:
                                 logger.info("Stop command received. Exiting main loop.")
@@ -162,22 +177,28 @@ class GoProWorker(QObject):
 
                             if cmd == "RECORD_START":
                                 self.status_changed.emit("REC: Starting...")
-                                await client.write_gatt_char(COMMAND_REQ_UUID, CMD_SHUTTER_ON, response=True)
+                                await client.write_gatt_char(
+                                    COMMAND_REQ_UUID, CMD_SHUTTER_ON, response=True
+                                )
                                 self.status_changed.emit("Recording!")
-                                
+
                             elif cmd == "RECORD_STOP":
                                 self.status_changed.emit("REC: Stopping...")
-                                await client.write_gatt_char(COMMAND_REQ_UUID, CMD_SHUTTER_OFF, response=True)
+                                await client.write_gatt_char(
+                                    COMMAND_REQ_UUID, CMD_SHUTTER_OFF, response=True
+                                )
                                 self.status_changed.emit("Ready")
 
                         except asyncio.TimeoutError:
                             try:
-                                bat_val = await client.read_gatt_char(UUID_BATTERY_LEVEL)
+                                bat_val = await client.read_gatt_char(
+                                    UUID_BATTERY_LEVEL
+                                )
                                 bat_percent = int(bat_val[0])
                                 self.battery_changed.emit(bat_percent)
                             except Exception as hb_err:
                                 logger.warning(f"Heartbeat failed: {hb_err}")
-                                break 
+                                break
 
                         except Exception as e:
                             logger.error(f"Command Loop Error: {e}")
@@ -217,4 +238,6 @@ class GoProWorker(QObject):
         logger.info("GoPro Disconnected callback")
         self.connection_success.emit(False)
         if self.loop and self._keep_running:
-            self.loop.call_soon_threadsafe(self._command_queue.put_nowait, "DISCONNECTED_EVENT")
+            self.loop.call_soon_threadsafe(
+                self._command_queue.put_nowait, "DISCONNECTED_EVENT"
+            )

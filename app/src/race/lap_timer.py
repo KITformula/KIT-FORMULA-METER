@@ -5,27 +5,28 @@ from src.race.course_manager import CourseManager
 
 logger = logging.getLogger(__name__)
 
+
 class LapTimer:
     def __init__(self, course_manager: CourseManager):
         self.course_manager = course_manager
-        
+
         self.lap_count = 0
         self.current_lap_start_time = 0.0
         self.previous_lap_time = 0.0
-        
+
         # 区間タイム計測用
         self.last_gate_pass_time = 0.0
-        
+
         # 前周のセクタータイム記録用 {sector_index: time}
-        self.previous_lap_sectors = {} 
+        self.previous_lap_sectors = {}
         # 現在周回のセクタータイム一時保存用
         self.current_lap_sectors = {}
 
         self.prev_gps_lat = None
         self.prev_gps_lon = None
-        
+
         self.is_timer_running = False
-        self.target_sector_index = 0 
+        self.target_sector_index = 0
 
     def reset_state(self, dash_info: DashMachineInfo):
         self.lap_count = 0
@@ -34,10 +35,10 @@ class LapTimer:
         self.last_gate_pass_time = 0.0
         self.is_timer_running = False
         self.target_sector_index = 0
-        
+
         self.previous_lap_sectors = {}
         self.current_lap_sectors = {}
-        
+
         self.prev_gps_lat = None
         self.prev_gps_lon = None
 
@@ -55,7 +56,7 @@ class LapTimer:
         status = current_gps_data.get("status", "V")
 
         is_valid_fix = (quality > 0 or status == "A") and (lat != 0.0 or lon != 0.0)
-        
+
         if not is_valid_fix:
             return
 
@@ -72,7 +73,7 @@ class LapTimer:
             return
 
         gate_line = self.course_manager.get_gate_line(self.target_sector_index)
-        
+
         if gate_line:
             machine_segment = ((self.prev_gps_lat, self.prev_gps_lon), (lat, lon))
             if self._check_intersection(machine_segment, gate_line):
@@ -81,7 +82,9 @@ class LapTimer:
         self.prev_gps_lat = lat
         self.prev_gps_lon = lon
 
-    def _on_gate_passed(self, sector_index: int, timestamp: float, dash_info: DashMachineInfo):
+    def _on_gate_passed(
+        self, sector_index: int, timestamp: float, dash_info: DashMachineInfo
+    ):
         print(f"★ GATE {sector_index} PASSED!")
 
         if not self.is_timer_running:
@@ -99,7 +102,7 @@ class LapTimer:
                 self.current_lap_start_time = timestamp
                 self.lap_count = 1
                 dash_info.lapCount = 1
-                
+
                 self.current_lap_sectors = {}
                 dash_info.sector_times = {}
                 dash_info.sector_diffs = {}
@@ -113,11 +116,11 @@ class LapTimer:
                 self._register_lap(final_lap_time, dash_info)
 
                 self.current_lap_start_time = timestamp
-                
+
                 # セクター記録の繰り越し
                 self.previous_lap_sectors = self.current_lap_sectors.copy()
                 self.current_lap_sectors = {}
-            
+
             next_index = 1
             if not self.course_manager.get_sector(next_index):
                 next_index = 0
@@ -127,16 +130,18 @@ class LapTimer:
             # --- 中間セクター通過 ---
             print(f"Sector {sector_index} Time: {sector_time:.2f}s")
             self._record_sector_time(sector_index, sector_time, dash_info)
-            
+
             next_index = sector_index + 1
             if not self.course_manager.get_sector(next_index):
                 next_index = 0
             self.target_sector_index = next_index
 
-    def _record_sector_time(self, sector_idx: int, current_time: float, dash_info: DashMachineInfo):
+    def _record_sector_time(
+        self, sector_idx: int, current_time: float, dash_info: DashMachineInfo
+    ):
         self.current_lap_sectors[sector_idx] = current_time
         dash_info.sector_times[sector_idx] = current_time
-        
+
         if sector_idx in self.previous_lap_sectors:
             prev_time = self.previous_lap_sectors[sector_idx]
             diff = current_time - prev_time
@@ -149,18 +154,21 @@ class LapTimer:
             dash_info.lapTimeDiff = lap_time - self.previous_lap_time
         else:
             dash_info.lapTimeDiff = 0.0
-            
+
         self.previous_lap_time = lap_time
         self.lap_count += 1
         dash_info.lapCount = self.lap_count
-        dash_info.lastLapTime = lap_time 
+        dash_info.lastLapTime = lap_time
         print(f"LAP FINISHED: {lap_time:.2f}s")
 
     @staticmethod
     def _check_intersection(seg1, seg2):
         p1, p2 = seg1
         p3, p4 = seg2
+
         def ccw(a, b, c):
             return (b[1] - a[1]) * (c[0] - a[0]) - (b[0] - a[0]) * (c[1] - a[1])
-        return (ccw(p1, p2, p3) * ccw(p1, p2, p4) < 0) and \
-               (ccw(p3, p4, p1) * ccw(p3, p4, p2) < 0)
+
+        return (ccw(p1, p2, p3) * ccw(p1, p2, p4) < 0) and (
+            ccw(p3, p4, p1) * ccw(p3, p4, p2) < 0
+        )

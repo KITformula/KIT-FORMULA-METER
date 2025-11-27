@@ -5,6 +5,7 @@ from src.machine.machine import Machine
 from src.util import config
 from src.util.fuel_store import FuelStore
 
+
 class VehicleService:
     def __init__(self):
         self.fuel_store = FuelStore()
@@ -17,7 +18,7 @@ class VehicleService:
             tank_capacity_ml=self.tank_capacity_ml,
             current_remaining_ml=current_start_ml,
         )
-        
+
         self.course_manager = CourseManager()
         self.lap_timer = LapTimer(self.course_manager)
         self.machine = Machine(self.fuel_calculator)

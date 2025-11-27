@@ -8,8 +8,11 @@ from src.telemetry.sender_interface import TelemetrySender
 
 logger = logging.getLogger(__name__)
 
+
 class GoogleSheetsSender(TelemetrySender):
-    def __init__(self, json_keyfile="service_account.json", spreadsheet_name="Formula_Log_2024"):
+    def __init__(
+        self, json_keyfile="service_account.json", spreadsheet_name="Formula_Log_2024"
+    ):
         self.json_keyfile = json_keyfile
         self.spreadsheet_name = spreadsheet_name
         self.client = None
@@ -18,8 +21,13 @@ class GoogleSheetsSender(TelemetrySender):
 
     def _connect(self):
         try:
-            scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-            creds = ServiceAccountCredentials.from_json_keyfile_name(self.json_keyfile, scope)
+            scope = [
+                "https://spreadsheets.google.com/feeds",
+                "https://www.googleapis.com/auth/drive",
+            ]
+            creds = ServiceAccountCredentials.from_json_keyfile_name(
+                self.json_keyfile, scope
+            )
             self.client = gspread.authorize(creds)
             self.sheet = self.client.open(self.spreadsheet_name).sheet1
             logger.info("Google Sheets Connected.")
@@ -47,9 +55,9 @@ class GoogleSheetsSender(TelemetrySender):
             "lap": finished_lap_num,
             "total_time": info.lastLapTime,
             "sector_times": info.sector_times.copy(),
-            "sector_diffs": info.sector_diffs.copy()
+            "sector_diffs": info.sector_diffs.copy(),
         }
-        
+
         # 書き込み処理をバックグラウンドで開始
         threading.Thread(target=self._write_row, args=(data_snapshot,)).start()
 
@@ -61,28 +69,28 @@ class GoogleSheetsSender(TelemetrySender):
             row_data = [
                 data["timestamp"],
                 data["lap"],
-                f"{data['total_time']:.3f}" if data['total_time'] else ""
+                f"{data['total_time']:.3f}" if data["total_time"] else "",
             ]
 
             # --- ★修正箇所: 安全なソート ---
             all_keys = list(data["sector_times"].keys())
-            
+
             # キーが整数であることを保証してフィルタリング
             # (万が一ゴミデータが入ってもエラーで止まらないようにする)
             int_keys = [k for k in all_keys if isinstance(k, int)]
-            
+
             # 0 (Final) 以外をソート
             sorted_keys = sorted([k for k in int_keys if k != 0])
-            
+
             if 0 in int_keys:
-                sorted_keys.append(0) # Finalを最後に追加
+                sorted_keys.append(0)  # Finalを最後に追加
 
             # データの追加
             for idx in sorted_keys:
                 # Time
                 time_val = data["sector_times"][idx]
                 row_data.append(f"{time_val:.3f}")
-                
+
                 # Diff
                 if idx in data["sector_diffs"]:
                     diff_val = data["sector_diffs"][idx]
@@ -91,7 +99,7 @@ class GoogleSheetsSender(TelemetrySender):
                     row_data.append("")
 
             # ヘッダー自動生成 (初回のみ)
-            if self.sheet and not self.sheet.acell('A1').value:
+            if self.sheet and not self.sheet.acell("A1").value:
                 headers = ["Time", "Lap", "Total"]
                 for idx in sorted_keys:
                     name = "Final" if idx == 0 else f"S{idx}"
@@ -101,7 +109,7 @@ class GoogleSheetsSender(TelemetrySender):
             if self.sheet:
                 self.sheet.append_row(row_data)
                 logger.info(f"Logged to Sheet: Lap {data['lap']}")
-            
+
         except Exception as e:
             logger.error(f"Sheet Write Error: {e}")
             self.client = None
