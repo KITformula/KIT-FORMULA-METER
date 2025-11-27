@@ -198,6 +198,7 @@ class DashMachineInfo:
 
     lapCount: int
     currentLapTime: float  # リアルタイムの経過時間または確定したラップタイム
+    lastLapTime: float
     lapTimeDiff: float  # 前周との差 (Δタイム)
     gpsQuality: int  # GPS品質
 
@@ -216,6 +217,9 @@ class DashMachineInfo:
     fuelEffectivePulseWidth: float
     delta_t: float  # 前回のパケットからの経過時間
 
+    sector_times: dict[int, float]
+    sector_diffs: dict[int, float]
+
     def __init__(self) -> None:
         self.rpm = Rpm(0)
         self.speed = 0.0  # ★初期化
@@ -230,12 +234,15 @@ class DashMachineInfo:
         self.brakePress = BrakePress()
         self.fuelEffectivePulseWidth = 0.0
         self.delta_t = 0.0
+
         self.lapCount = 0
         self.currentLapTime = 0.0
+        self.lastLapTime = 0.0
         self.lapTimeDiff = 0.0
         self.gpsQuality = 0
-        # 前回のラップタイム記録用（必要であれば）
-        self.lastLapTime = 0.0
+        
+        self.sector_times = {}
+        self.sector_diffs = {}
 
     def setRpm(self, rpm: int):
         self.rpm = Rpm(rpm)

@@ -11,18 +11,20 @@ from src.race.course_manager import CourseManager
 from src.gui.gui import MainDisplayWindow, WindowListener
 from src.gui.splash_screen import SplashScreen
 from src.machine.machine import Machine
-
 from src.logger.csv_logger import CsvLogger
-from src.telemetry.mqtt_sender import MqttTelemetrySender
+
+# ★変更: MQTTをやめてGoogle Sheets Senderを使う
+# from src.telemetry.mqtt_sender import MqttTelemetrySender
+from src.telemetry.google_sheets_sender import GoogleSheetsSender
+
 from src.telemetry.sender_interface import TelemetrySender
 from src.tpms.tpms_worker import TpmsWorker
 from src.util import config
 from src.util.fuel_store import FuelStore
 from src.mileage.mileage_tracker import MileageTracker
-
 from src.hardware.encoder_worker import EncoderWorker
 from src.gopro.gopro_worker import GoProWorker
-from src.gps.gps_worker import GpsWorker # ★常にインポート
+from src.gps.gps_worker import GpsWorker
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +33,6 @@ class AppWindowListener(WindowListener):
         self.app = app_instance
     def onUpdate(self):
         self.app.update()
-
 
 class Application(QObject, WindowListener):
     def __init__(self):
@@ -57,9 +58,14 @@ class Application(QObject, WindowListener):
         self.lap_timer = LapTimer(self.course_manager)
         
         self.machine = Machine(self.fuel_calculator)
-
         self.csv_logger = CsvLogger(base_dir="logs")
-        self.telemetry_sender: TelemetrySender = MqttTelemetrySender()
+
+        # ★変更: Google Sheets Sender の初期化
+        # 名前はご自身のスプレッドシートに合わせて変更してください
+        self.telemetry_sender = GoogleSheetsSender(
+            json_keyfile="service_account.json",
+            spreadsheet_name="Formula_Log_2024"
+        )
 
         self.tpms_worker = TpmsWorker(
             frequency=config.RTL433_FREQUENCY,
@@ -68,11 +74,10 @@ class Application(QObject, WindowListener):
         )
         self.latest_tpms_data = {}
 
-        # --- GPS Workerの初期化 (デバッグ対応) ---
+        # --- GPS Worker ---
         self.gps_port = getattr(config, "GPS_PORT", "COM6")
         self.gps_baud = getattr(config, "GPS_BAUD", 115200)
         
-        # ★修正: debugフラグを渡して、本番/モックを切り替える
         self.gps_worker = GpsWorker(
             self.gps_port, 
             self.gps_baud, 
@@ -81,9 +86,11 @@ class Application(QObject, WindowListener):
         self.gps_thread = None
 
         self.gopro_worker = GoProWorker()
-
         self.current_gps_data = {}
         self.current_lsd_level = 1
+        
+        # ★追加: アプリ側でラップ更新を検知するための変数
+        self.last_processed_lap_count = 0
 
         if config.debug:
             print("★ App: DEBUG Mode (GPS Mock Enabled)")
@@ -103,49 +110,32 @@ class Application(QObject, WindowListener):
         image_path = "src/gui/icons/kitformula2.png"
 
         self.splash = SplashScreen(image_path, screen_size)
-
         self.tpms_worker.data_updated.connect(self.on_tpms_update)
 
-        # ★修正: 常にGPSシグナルを接続する
         if self.gps_worker:
             self.gps_worker.data_received.connect(self.on_gps_update)
-            self.gps_worker.error_occurred.connect(
-                lambda err: print(f"GPS Error: {err}")
-            )
+            self.gps_worker.error_occurred.connect(lambda err: print(f"GPS Error: {err}"))
 
         self.splash.ready_for_heavy_init.connect(self.perform_initialization)
         self.splash.fade_out_finished.connect(self.show_main_window)
         self.splash.start()
-
         self.app.aboutToQuit.connect(self.cleanup)
-
         sys.exit(self.app.exec_())
 
     def cleanup(self):
         logger.info("Application shutting down...")
         self.save_fuel_state()
         self.mileage_tracker.save()
-
-        if self.csv_logger.is_active:
-            self.csv_logger.stop()
-
-        if self.tpms_worker:
-            self.tpms_worker.stop()
-
-        if self.telemetry_sender:
-            self.telemetry_sender.stop()
-
-        if self.gps_worker:
-            self.gps_worker.stop()
-            
-        if self.encoder_worker:
-            self.encoder_worker.stop()
-            
-        if self.gopro_worker:
-            self.gopro_worker.stop()
+        if self.csv_logger.is_active: self.csv_logger.stop()
+        if self.tpms_worker: self.tpms_worker.stop()
+        if self.telemetry_sender: self.telemetry_sender.stop()
+        if self.gps_worker: self.gps_worker.stop()
+        if self.encoder_worker: self.encoder_worker.stop()
+        if self.gopro_worker: self.gopro_worker.stop()
 
     def perform_initialization(self):
         self.machine.initialise()
+        # 送信機スタート（今回は常時接続しないので中身は空ですが呼んでおく）
         self.telemetry_sender.start()
 
         self.window = MainDisplayWindow(self)
@@ -161,14 +151,8 @@ class Application(QObject, WindowListener):
         self.window.requestGoProRecStart.connect(self.gopro_worker.send_command_record_start)
         self.window.requestGoProRecStop.connect(self.gopro_worker.send_command_record_stop)
         
-        self.gopro_worker.status_changed.connect(
-            self.window.updateGoProStatus, 
-            type=Qt.QueuedConnection
-        )
-        self.gopro_worker.battery_changed.connect(
-            self.window.updateGoProBattery,
-            type=Qt.QueuedConnection
-        )
+        self.gopro_worker.status_changed.connect(self.window.updateGoProStatus, type=Qt.QueuedConnection)
+        self.gopro_worker.battery_changed.connect(self.window.updateGoProBattery, type=Qt.QueuedConnection)
 
         self.encoder_worker = EncoderWorker(pin_a=27, pin_b=17, pin_sw=22)
         self.encoder_worker.rotated_cw.connect(self.window.input_cw)
@@ -180,7 +164,6 @@ class Application(QObject, WindowListener):
 
         self.tpms_worker.start()
 
-        # ★修正: 常にGPSスレッドを開始する
         if self.gps_worker:
             self.gps_thread = threading.Thread(target=self.gps_worker.run, daemon=True)
             self.gps_thread.start()
@@ -195,7 +178,8 @@ class Application(QObject, WindowListener):
     @pyqtSlot()
     def reset_fuel_integrator(self):
         print("★ Fuel Integrator Reset Requested")
-        self.fuel_calculator.remaining_fuel_ml = self.tank_capacity_ml
+        # ★修正: セッター経由で値をセットするように変更 (FuelCalculator側の実装に合わせて)
+        self.fuel_calculator.remaining_fuel_ml = self.tank_capacity_ml 
         self.save_fuel_state()
         print(f"-> Fuel reset to {self.tank_capacity_ml} ml")
 
@@ -205,25 +189,18 @@ class Application(QObject, WindowListener):
 
     @pyqtSlot()
     def set_start_line(self):
-        # デバッグモードでもGPS座標を使ってキャリブレーションを行うように変更
         lat = self.current_gps_data.get("latitude", 0.0)
         lon = self.current_gps_data.get("longitude", 0.0)
-        
-        if config.debug:
-            print(f"MOCK: キャリブレーション ({lat}, {lon})")
-
+        if config.debug: print(f"MOCK: キャリブレーション ({lat}, {lon})")
         self.course_manager.calibrate_position(lat, lon)
         self.lap_timer.reset_state(self.machine.canMaster.dashMachineInfo)
 
     @pyqtSlot(int)
     def set_sector_point(self, sector_index: int):
         internal_index = sector_index - 1
-        
         lat = self.current_gps_data.get("latitude", 0.0)
         lon = self.current_gps_data.get("longitude", 0.0)
         heading = self.current_gps_data.get("heading", 0.0)
-        
-        # 0.0 のチェックは外す（モックの初期値が0.0の場合があるが、動いていれば入る）
         print(f"Registering Sector {sector_index}: {lat}, {lon}, {heading}")
         self.course_manager.set_sector_point(internal_index, lat, lon, heading)
 
@@ -234,11 +211,10 @@ class Application(QObject, WindowListener):
     @pyqtSlot(dict)
     def on_gps_update(self, data: dict):
         self.current_gps_data = data
-        
         if hasattr(self.machine.canMaster.dashMachineInfo, "gpsQuality"):
             self.machine.canMaster.dashMachineInfo.gpsQuality = data.get("quality", 0)
-            
-        # LapTimerに更新を依頼 (モックGPSデータでもここで判定される)
+        
+        # LapTimer更新
         self.lap_timer.update(data, self.machine.canMaster.dashMachineInfo)
 
     def show_main_window(self):
@@ -251,49 +227,44 @@ class Application(QObject, WindowListener):
 
     def onUpdate(self) -> None:
         self.update_count += 1
-
         dash_info = self.machine.canMaster.dashMachineInfo
         fuel_percentage = self.fuel_calculator.remaining_fuel_percent
-
-        # ★修正: デバッグ時のモック更新（タイマーのみ進行）は不要になった
-        # GpsWorkerがモックGPSを生成し、on_gps_update経由でLapTimerが進むため
-        # if config.debug:
-        #     self.lap_timer.update_mock(dash_info)
-            
         current_rpm = int(dash_info.rpm)
         
+        # CSVロギング
         if current_rpm >= 500:
             if not self.csv_logger.is_active:
                 self.csv_logger.start()
-            
             fl_temp = self.latest_tpms_data.get("FL", {}).get("temp_c", 0.0)
             fr_temp = self.latest_tpms_data.get("FR", {}).get("temp_c", 0.0)
             rl_temp = self.latest_tpms_data.get("RL", {}).get("temp_c", 0.0)
             rr_temp = self.latest_tpms_data.get("RR", {}).get("temp_c", 0.0)
-
             self.csv_logger.log(
                 rpm=current_rpm,
                 throttle=dash_info.throttlePosition,
                 water_temp=int(dash_info.waterTemp),
                 oil_press=dash_info.oilPress.oilPress,
                 gear=int(dash_info.gearVoltage.gearType),
-                fl_temp=fl_temp,
-                fr_temp=fr_temp,
-                rl_temp=rl_temp,
-                rr_temp=rr_temp
+                fl_temp=fl_temp, fr_temp=fr_temp, rl_temp=rl_temp, rr_temp=rr_temp
             )
-            
         else:
             if self.csv_logger.is_active:
                 self.csv_logger.stop()
 
-        if dash_info.rpm >= 500:
-            # (MQTT送信処理)
-            self.telemetry_sender.send(
-                info=dash_info,
-                fuel_percent=fuel_percentage,
-                tpms_data=self.latest_tpms_data,
-            )
+        # ★修正: Google Sheets 送信 (ラップ確定チェックをここで実施)
+        if dash_info.lapCount > self.last_processed_lap_count:
+            # 1周目(lapCount=1)は「スタートしただけ」なので送らない
+            # 2周目に入った瞬間(lapCount=2)に、1周目のデータを送る
+            if dash_info.lapCount > 1:
+                print(f"★ Lap Update Detected: {self.last_processed_lap_count} -> {dash_info.lapCount}. Sending to Sheets...")
+                self.telemetry_sender.send(
+                    info=dash_info,
+                    fuel_percent=fuel_percentage,
+                    tpms_data=self.latest_tpms_data,
+                )
+            
+            # 処理済みラップ数を更新
+            self.last_processed_lap_count = dash_info.lapCount
 
         if self.window is not None:
             session_km = self.current_gps_data.get("total_distance_km", 0.0)
@@ -310,7 +281,6 @@ class Application(QObject, WindowListener):
             )
         return super().onUpdate()
     
-    # (以下省略)
     def save_fuel_state(self):
         current_ml = self.fuel_calculator.remaining_fuel_ml
         self.fuel_store.save_state(current_ml)

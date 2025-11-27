@@ -130,3 +130,5 @@ dmypy.json
 
 log/
 .DS_Store
+
+service_account.json
