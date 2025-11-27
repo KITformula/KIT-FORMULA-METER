@@ -6,16 +6,25 @@ from PyQt5.QtWidgets import QApplication
 from src.gui.gui import MainDisplayWindow, WindowListener
 from src.gui.splash_screen import SplashScreen
 from src.util import config
+
+
 from src.services.vehicle_service import VehicleService
 from src.services.telemetry_service import TelemetryService
 from src.services.hardware_service import HardwareService
 
 logger = logging.getLogger(__name__)
 
+class AppWindowListener(WindowListener):
+    def __init__(self, app_instance):
+        self.app = app_instance
+    def onUpdate(self):
+        self.app.update()
+
 class Application(QObject, WindowListener):
     def __init__(self):
         super().__init__()
 
+        # サービス層の初期化 (これでロジックやデバイス管理を委譲)
         self.vehicle_service = VehicleService()
         self.telemetry_service = TelemetryService()
         self.hardware_service = HardwareService()
@@ -25,7 +34,7 @@ class Application(QObject, WindowListener):
         self.current_lsd_level = 1
         self.update_count = 0
 
-        # Connect signals
+        # Connect signals from HardwareService
         self.hardware_service.tpms_updated.connect(self.on_tpms_update)
         self.hardware_service.gps_updated.connect(self.on_gps_update)
 
@@ -54,6 +63,7 @@ class Application(QObject, WindowListener):
 
     def cleanup(self):
         logger.info("Application shutting down...")
+        # 各サービスに終了処理を委譲
         self.vehicle_service.save_fuel_state()
         self.telemetry_service.save_mileage()
         self.telemetry_service.stop()
@@ -72,12 +82,15 @@ class Application(QObject, WindowListener):
         self.splash.start_fade_out()
 
     def _connect_gui_signals(self):
+        # GUIからのリクエストを適切なサービスメソッドに接続
         self.window.requestSetStartLine.connect(self.set_start_line)
         self.window.requestResetFuel.connect(self.reset_fuel_integrator)
         self.window.requestLapTimeSetup.connect(self.setup_lap_time)
         self.window.requestLsdChange.connect(self.change_lsd_level)
         self.window.requestSetSector.connect(self.set_sector_point)
         
+        # GoPro操作 (HardwareServiceの中のWorkerにアクセス)
+        # ※より厳密には HardwareService に start_gopro_connection() 等を作るのが理想だが、現状はこれでOK
         self.window.requestGoProConnect.connect(self.hardware_service.gopro_worker.start_connection)
         self.window.requestGoProDisconnect.connect(self.hardware_service.gopro_worker.stop)
         self.window.requestGoProRecStart.connect(self.hardware_service.gopro_worker.send_command_record_start)
@@ -129,9 +142,11 @@ class Application(QObject, WindowListener):
     @pyqtSlot(dict)
     def on_gps_update(self, data: dict):
         self.current_gps_data = data
+        # GPS品質情報の更新
         if hasattr(self.vehicle_service.dash_info, "gpsQuality"):
             self.vehicle_service.dash_info.gpsQuality = data.get("quality", 0)
         
+        # VehicleServiceにデータ更新を依頼 (LapTimerなどが動く)
         self.vehicle_service.update(data)
 
     def show_main_window(self):
@@ -145,6 +160,7 @@ class Application(QObject, WindowListener):
     def onUpdate(self) -> None:
         self.update_count += 1
         
+        # テレメトリサービスに「現在の状態」を渡して、送信やログ記録を判断・実行してもらう
         self.telemetry_service.process(
             self.vehicle_service.dash_info,
             self.vehicle_service.fuel_percentage,
@@ -152,6 +168,7 @@ class Application(QObject, WindowListener):
             self.current_gps_data
         )
 
+        # GUIの更新
         if self.window is not None:
             daily_km, total_km = self.telemetry_service.mileage_tracker.get_mileage()
 
@@ -164,6 +181,9 @@ class Application(QObject, WindowListener):
                 total_km
             )
     
+    # ★修正2: 不要になった save_fuel_state(self) メソッドを削除しました
+    # 既に save_states_periodically が vehicle_service 経由で呼んでいるため不要です。
+
     @pyqtSlot(int)
     def change_lsd_level(self, level: int):
         print(f"★ LSD Level Changed to: {level}")
