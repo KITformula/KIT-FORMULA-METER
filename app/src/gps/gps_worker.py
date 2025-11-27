@@ -172,36 +172,70 @@ class GpsWorker(QObject):
         print("GPS Mock Finished")
 
     def _run_serial(self):
-        """本番用: シリアルポートから読み込み"""
-        try:
-            self.ser = serial.Serial(self.port, self.baudrate, timeout=1.0)
-            print(f"GPS: シリアルポート {self.port} を開きました。受信待機中...")
-            raw_line_count = 0
+        """本番用: シリアルポートから読み込み (自動再接続機能付き)"""
+        print(f"GPS Worker: Starting connection loop for {self.port}...")
+        
+        while self._running:
+            try:
+                # 1. シリアルポートを開く (接続試行)
+                self.ser = serial.Serial(self.port, self.baudrate, timeout=1.0)
+                print(f"GPS: シリアルポート {self.port} 接続成功。受信開始。")
+                
+                # 接続成功したらエラーをクリア通知（必要であれば）
+                # self.error_occurred.emit("GPS Connected") 
 
-            while self._running:
-                if not self.ser.is_open:
-                    break
-                try:
-                    line = self.ser.readline().decode("ascii", errors="ignore").strip()
-                    if not line: continue
-                    
-                    if raw_line_count < 5:
-                        print(f"GPS Raw: {line}")
-                        raw_line_count += 1
+                raw_line_count = 0
 
-                    if line.startswith(("$GN", "$GP")):
-                        if self.parse_nmea_line(line):
-                            self._update_distance_and_emit()
+                # 2. 読み込みループ (接続が維持されている間)
+                while self._running and self.ser.is_open:
+                    try:
+                        # データ読み込み
+                        line = self.ser.readline().decode("ascii", errors="ignore").strip()
+                        
+                        if not line:
+                            continue
+                        
+                        # 最初の数行だけログに出して動作確認しやすくする
+                        if raw_line_count < 5:
+                            print(f"GPS Raw: {line}")
+                            raw_line_count += 1
 
-                except serial.SerialException as se:
-                    if self._running: self.error_occurred.emit(f"GPS Serial Error: {se}")
-                    break
-                except Exception:
-                    pass
-        except Exception as e:
-            if self._running: self.error_occurred.emit(f"GPS Init Error: {e}")
-        finally:
-            self.stop()
+                        # NMEAフォーマット($GNxxx, $GPxxx)の解析
+                        if line.startswith(("$GN", "$GP")):
+                            if self.parse_nmea_line(line):
+                                self._update_distance_and_emit()
+
+                    except serial.SerialException as se:
+                        # 読み込み中の切断エラー等 -> 内部ループを抜けて再接続へ
+                        print(f"GPS切断検知 (Read Error): {se}")
+                        break 
+                    except Exception:
+                        # パースエラーなどは無視して読み込み継続
+                        pass
+
+            except Exception as e:
+                # 接続時のエラー (デバイスが見つからない等)
+                if self._running:
+                    print(f"GPS接続エラー: {e} -> 2秒後に再試行します...")
+                    # GUIに頻繁に通知すると重くなるため、printに留めるか、
+                    # "Retrying..." と一度だけ送る制御を入れるのがベターです
+                    # self.error_occurred.emit(f"GPS Error: {e}")
+
+            finally:
+                # 切断処理 (リソース解放)
+                if self.ser and self.ser.is_open:
+                    try:
+                        self.ser.close()
+                    except Exception:
+                        pass
+                self.ser = None
+
+            # 3. 再接続待機 (停止フラグが立っていない場合のみ)
+            if self._running:
+                time.sleep(2.0)
+        
+        print("GPS Worker スレッドを終了します。")
+        
 
     def _update_distance_and_emit(self):
         """距離計算とシグナル発行（本番用）"""

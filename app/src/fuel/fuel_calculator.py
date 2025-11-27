@@ -1,3 +1,6 @@
+import threading
+
+
 class FuelCalculator:
     """
     インジェクターの性能値などのパラメータを元に、
@@ -31,16 +34,21 @@ class FuelCalculator:
         # 2. このインスタンスが起動してからの「積算消費量」
         self.session_consumed_cc = 0.0
 
+        # ★ 追加: 排他制御用のロック (スレッドセーフ対策)
+        self._lock = threading.Lock()
+
     @property
     def remaining_fuel_ml(self) -> float:
         """
         現在の燃料残量を計算して返す。
         (計算開始時の残量 - このセッションでの消費量)
         """
-        # ccとmlは等価
-        current_ml = self._start_remaining_ml - self.session_consumed_cc
-        # タンク容量以上になったり、0未満になったりしないように制限
-        return max(0.0, min(self.tank_capacity_ml, current_ml))
+        # 読み込み時もロックを取得して整合性を保つ
+        with self._lock:
+            # ccとmlは等価
+            current_ml = self._start_remaining_ml - self.session_consumed_cc
+            # タンク容量以上になったり、0未満になったりしないように制限
+            return max(0.0, min(self.tank_capacity_ml, current_ml))
 
     # ★★★ 修正: セッターを追加して値を更新できるようにする ★★★
     @remaining_fuel_ml.setter
@@ -50,8 +58,10 @@ class FuelCalculator:
         これまでのセッション消費量を0にリセットし、
         開始時の残量を新しい値に設定する。
         """
-        self._start_remaining_ml = value
-        self.session_consumed_cc = 0.0
+        # 書き込み時もロックを取得
+        with self._lock:
+            self._start_remaining_ml = value
+            self.session_consumed_cc = 0.0
 
     @property
     def remaining_fuel_percent(self) -> float:
@@ -64,6 +74,7 @@ class FuelCalculator:
             return 0.0
 
         # (現在の残量 / 満タン容量) * 100
+        # self.remaining_fuel_ml へのアクセス自体がロックされているため、ここはロック不要
         percentage = (self.remaining_fuel_ml / self.tank_capacity_ml) * 100.0
 
         return max(0.0, min(100.0, percentage))
@@ -81,24 +92,25 @@ class FuelCalculator:
         # インジェクター噴射回数(回/秒) = (RPM / 60) / 2 (4ストロークエンジンの場合、2回転に1回噴射)
         # ※シーケンシャル噴射などを想定。同時噴射の場合は要調整だが、ここでは一般的な計算式を使用。
         injections_per_second_per_cylinder = (rpm / 60.0) / 2.0
-        
+
         # 1秒あたりの総噴射時間(ms) = 1回あたりの噴射時間(ms) * 1秒あたりの回数
         total_injection_time_ms_per_second = (
             effective_pulse_width_us / 1000.0
         ) * injections_per_second_per_cylinder
-        
+
         # 1気筒あたりの消費量(cc/sec) = 総噴射時間(ms) * 流量(cc/ms)
         fuel_consumption_cc_per_second_per_cylinder = (
             total_injection_time_ms_per_second * self.injector_flow_rate_cc_per_ms
         )
-        
+
         # エンジン全体での消費量(cc/sec)
         total_consumption_cc_per_second = (
             fuel_consumption_cc_per_second_per_cylinder * self.num_cylinders
         )
-        
+
         # 経過時間(delta_t)での消費量
         fuel_used_in_delta_t = total_consumption_cc_per_second * delta_t_sec
 
-        # このセッションでの消費量として積算
-        self.session_consumed_cc += fuel_used_in_delta_t
+        # ★ 修正: このセッションでの消費量として積算（ロックを取得）
+        with self._lock:
+            self.session_consumed_cc += fuel_used_in_delta_t

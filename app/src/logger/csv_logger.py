@@ -51,6 +51,8 @@ class CsvLogger:
             print(f"Failed to open log file: {e}")
 
     # ★変更: 引数を増やし、書き込み内容を追加
+    # app/src/logger/csv_logger.py
+
     def log(self, rpm, throttle, water_temp, oil_press, gear, fl_temp, fr_temp, rl_temp, rr_temp):
         """
         1行分のデータを書き込む。
@@ -63,7 +65,6 @@ class CsvLogger:
         elapsed_seconds = time.time() - self.start_timestamp
         
         try:
-            # ★変更: 全てのデータをリストにして書き込む
             self.writer.writerow([
                 current_time_str, 
                 f"{elapsed_seconds:.3f}", 
@@ -77,6 +78,9 @@ class CsvLogger:
                 f"{rl_temp:.1f}",
                 f"{rr_temp:.1f}"
             ])
+            # ★ 追加: 書き込みを即座にディスクへ反映させる
+            self.file.flush() 
+            
         except ValueError:
             pass
 

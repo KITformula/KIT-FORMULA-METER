@@ -64,13 +64,17 @@ class GoogleSheetsSender(TelemetrySender):
                 f"{data['total_time']:.3f}" if data['total_time'] else ""
             ]
 
-            # --- ★修正箇所: 並び順の制御 ---
-            # 通常のソートだと 0 (Final) が最初に来てしまうため、
-            # 0 以外のキーをソートした後、0 があれば最後に付け足すロジックにする
+            # --- ★修正箇所: 安全なソート ---
             all_keys = list(data["sector_times"].keys())
-            sorted_keys = sorted([k for k in all_keys if k != 0])
             
-            if 0 in all_keys:
+            # キーが整数であることを保証してフィルタリング
+            # (万が一ゴミデータが入ってもエラーで止まらないようにする)
+            int_keys = [k for k in all_keys if isinstance(k, int)]
+            
+            # 0 (Final) 以外をソート
+            sorted_keys = sorted([k for k in int_keys if k != 0])
+            
+            if 0 in int_keys:
                 sorted_keys.append(0) # Finalを最後に追加
 
             # データの追加
