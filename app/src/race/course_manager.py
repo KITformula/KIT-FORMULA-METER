@@ -20,7 +20,7 @@ class CourseManager:
     """
 
     COURSE_FILE_PATH = "course_data.json"
-    GATE_WIDTH_METERS = 5.0  # ゲートの幅 (左右合計)
+    GATE_WIDTH_METERS = 7.0  # ゲートの幅 (左右合計)
 
     def __init__(self):
         self.sectors: List[SectorPoint] = []
@@ -34,6 +34,16 @@ class CourseManager:
         """
         指定されたインデックスのセクター地点を登録・更新する。
         """
+        
+        # ★★★ 修正箇所: スタートライン(Index 0)を設定する場合は、既存のコースをリセットする ★★★
+        if index == 0:
+            self.offset_lat = 0.0
+            self.offset_lon = 0.0
+            # 過去に設定した中間セクター(Sector 1など)が残っているとラップ計測が止まるため、
+            # 新しいスタートライン設定時にはリストを空にして初期化する。
+            self.sectors = []  
+            print("Course reset due to Start Line update.")
+
         # 既存の同じインデックスがあれば削除
         self.sectors = [s for s in self.sectors if s.index != index]
 

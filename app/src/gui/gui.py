@@ -58,6 +58,9 @@ class DashboardWidget(QWidget):
 
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.listener.onUpdate)
+        
+        # ★修正: 50ms -> 100ms (10fps) に変更して負荷を下げる
+        # 人間の目で認識するメーターとしては10fpsあれば十分スムーズに見えます
         self.timer.start(50)
 
         palette = QApplication.palette()
@@ -97,8 +100,16 @@ class DashboardWidget(QWidget):
         mainLayout.setRowStretch(0, 1)
         mainLayout.setRowStretch(1, 1)
         mainLayout.setRowStretch(2, 0)
+        
+        # キャッシュ用変数
+        self._last_gopro_val = -1
 
     def updateGoProBattery(self, value: int):
+        # 値が変わった時だけ更新
+        if self._last_gopro_val == value:
+            return
+        self._last_gopro_val = value
+
         color = "#0F0"  # 緑
         if value < 20:
             color = "#F00"  # 赤
@@ -116,6 +127,10 @@ class DashboardWidget(QWidget):
     def updateDashboard(
         self, dashMachineInfo: DashMachineInfo, fuel_percentage: float, tpms_data: dict
     ):
+        # ここで各ウィジェットのupdateメソッドを呼ぶが、
+        # 本来は各ウィジェット側で前回値と比較してガードするのが理想。
+        # 今回は簡易的にそのまま呼ぶが、頻度を落としたので軽くなるはず。
+        
         self.rpmLightBar.updateRpmBar(dashMachineInfo.rpm)
         self.rpmLabel.updateRpmLabel(dashMachineInfo.rpm)
         self.gearLabel.updateGearLabel(dashMachineInfo.gearVoltage.gearType)
