@@ -7,6 +7,10 @@ logger = logging.getLogger(__name__)
 
 
 class LapTimer:
+    # 修正1: チャタリング防止時間を5秒から1秒に短縮
+    # (5秒だとスタート直後の第1セクターなどを見逃す原因になるため)
+    GATE_COOLDOWN_SEC = 1.0
+
     def __init__(self, course_manager: CourseManager):
         self.course_manager = course_manager
 
@@ -27,6 +31,14 @@ class LapTimer:
 
         self.is_timer_running = False
         self.target_sector_index = 0
+
+        self.target_laps = 0  # 内部保持用の設定値
+
+    # ★追加: 外部（Service層など）からターゲット周回数を設定するためのメソッド
+    def set_target_laps(self, laps: int):
+        """ターゲット周回数を設定する (0=無制限)"""
+        self.target_laps = laps
+        print(f"Target Laps set to: {self.target_laps}")
 
     def reset_state(self, dash_info: DashMachineInfo):
         self.lap_count = 0
@@ -49,36 +61,73 @@ class LapTimer:
         dash_info.sector_times = {}
         dash_info.sector_diffs = {}
 
+        dash_info.isRaceFinished = False  # ★フラグもリセット
+
     def update(self, current_gps_data: dict, dash_info: DashMachineInfo):
-        lat = current_gps_data.get("latitude", 0.0)
-        lon = current_gps_data.get("longitude", 0.0)
+        # 1. データの取得とバリデーション
+        lat = current_gps_data.get("latitude")
+        lon = current_gps_data.get("longitude")
         quality = current_gps_data.get("quality", 0)
         status = current_gps_data.get("status", "V")
 
-        is_valid_fix = (quality > 0 or status == "A") and (lat != 0.0 or lon != 0.0)
+        # Noneチェック
+        if lat is None or lon is None:
+            return
 
+        # GPS精度のチェック
+        is_valid_fix = (quality > 0 or status == "A") and (lat != 0.0 or lon != 0.0)
         if not is_valid_fix:
+            return
+
+        # ★追加: レースが終了している場合は、以後のタイム更新処理を行わない（表示を固定するため）
+        if getattr(dash_info, "isRaceFinished", False):
             return
 
         current_time = time.monotonic()
 
+        # リアルタイムの経過時間を更新
         if self.is_timer_running:
             dash_info.currentLapTime = current_time - self.current_lap_start_time
         else:
             dash_info.currentLapTime = 0.0
 
+        # 2. 初回座標の初期化チェック
         if self.prev_gps_lat is None:
             self.prev_gps_lat = lat
             self.prev_gps_lon = lon
             return
 
-        gate_line = self.course_manager.get_gate_line(self.target_sector_index)
+        # 3. クールダウン（不感時間）チェック
+        if (current_time - self.last_gate_pass_time) < self.GATE_COOLDOWN_SEC:
+            if self.last_gate_pass_time != 0.0:
+                self.prev_gps_lat = lat
+                self.prev_gps_lon = lon
+                return
 
-        if gate_line:
-            machine_segment = ((self.prev_gps_lat, self.prev_gps_lon), (lat, lon))
-            if self._check_intersection(machine_segment, gate_line):
+        # 4. ゲート交差判定
+        machine_segment = ((self.prev_gps_lat, self.prev_gps_lon), (lat, lon))
+        passed_target = False  # 今回ターゲットを通過したかどうかのフラグ
+
+        # --- A. 本来通過すべきターゲットセクターのチェック ---
+        gate_line_target = self.course_manager.get_gate_line(self.target_sector_index)
+
+        if gate_line_target:
+            if self._check_intersection(machine_segment, gate_line_target):
                 self._on_gate_passed(self.target_sector_index, current_time, dash_info)
+                passed_target = True
 
+        # --- B. 修正2: リカバリー処理（中間セクター見逃し対策） ---
+        # ターゲット通過しておらず、かつターゲットがゴール(0)ではない場合、
+        # ゴールライン(0)を通過していないかチェックする。
+        if not passed_target and self.target_sector_index != 0:
+            gate_line_zero = self.course_manager.get_gate_line(0)
+            if gate_line_zero:
+                if self._check_intersection(machine_segment, gate_line_zero):
+                    print(f"★ Missed intermediate sector! Recovering at Start/Finish line.")
+                    # 強制的にセクター0通過として処理（ラップ更新）
+                    self._on_gate_passed(0, current_time, dash_info)
+
+        # 5. 今回の座標を次回用に保存
         self.prev_gps_lat = lat
         self.prev_gps_lon = lon
 
@@ -109,18 +158,31 @@ class LapTimer:
                 print("--- RACE START ---")
             else:
                 # ゴール (周回完了)
-                # 最終セクターを記録 (キーは便宜上0とする)
                 self._record_sector_time(0, sector_time, dash_info)
 
                 final_lap_time = timestamp - self.current_lap_start_time
                 self._register_lap(final_lap_time, dash_info)
 
+                # ★修正: ターゲット周回数に達したかの判定
+                # _register_lapでlap_countが+1されているため、完了したラップ数は (self.lap_count - 1)
+                completed_laps = self.lap_count - 1
+                if self.target_laps > 0 and completed_laps >= self.target_laps:
+                    print(f"--- RACE FINISHED (Target: {self.target_laps} Laps) ---")
+                    # タイマーを停止し、終了フラグを立てる
+                    self.is_timer_running = False
+                    dash_info.isRaceFinished = True
+                    # 次のラップの計測準備（current_lap_start_timeの更新など）を行わずにリターンする
+                    # これにより dash_info.lastLapTime に最終ラップのタイムが保持され続ける
+                    return
+
+                # --- 次のラップ開始 (レース継続時のみ) ---
                 self.current_lap_start_time = timestamp
 
                 # セクター記録の繰り越し
                 self.previous_lap_sectors = self.current_lap_sectors.copy()
                 self.current_lap_sectors = {}
 
+            # 次のターゲットを設定（まずはSector 1、無ければSector 0）
             next_index = 1
             if not self.course_manager.get_sector(next_index):
                 next_index = 0
@@ -131,6 +193,7 @@ class LapTimer:
             print(f"Sector {sector_index} Time: {sector_time:.2f}s")
             self._record_sector_time(sector_index, sector_time, dash_info)
 
+            # 次のターゲットを設定
             next_index = sector_index + 1
             if not self.course_manager.get_sector(next_index):
                 next_index = 0

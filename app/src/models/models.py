@@ -219,6 +219,8 @@ class DashMachineInfo:
 
     sector_times: dict[int, float]
     sector_diffs: dict[int, float]
+    targetLaps: int = 0       # 0なら無制限(練習モード)、設定値があればその周回数で終了
+    isRaceFinished: bool = False  # レースが終了したかどうか
 
     def __init__(self) -> None:
         self.rpm = Rpm(0)
@@ -243,6 +245,9 @@ class DashMachineInfo:
 
         self.sector_times = {}
         self.sector_diffs = {}
+
+        self.targetLaps = 0
+        self.isRaceFinished = False
 
     def setRpm(self, rpm: int):
         self.rpm = Rpm(rpm)

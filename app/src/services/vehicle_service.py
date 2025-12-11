@@ -34,6 +34,20 @@ class VehicleService:
         self.fuel_calculator.remaining_fuel_ml = self.tank_capacity_ml
         self.save_fuel_state()
 
+    # ★追加: ターゲット周回数を設定するメソッド
+    def set_target_laps(self, laps: int):
+        """
+        アプリケーション層からのターゲット周回数設定を受け取り、
+        LapTimerおよびDashMachineInfoに反映させる。
+        """
+        print(f"VehicleService: Setting target laps to {laps}")
+        # 計測ロジックへ設定値を渡す
+        self.lap_timer.set_target_laps(laps)
+        
+        # GUI表示用にデータモデルにも設定値を記録しておく
+        # (DashMachineInfo側にも targetLaps フィールドを追加しておくことを推奨)
+        self.dash_info.targetLaps = laps
+
     @property
     def dash_info(self):
         return self.machine.canMaster.dashMachineInfo

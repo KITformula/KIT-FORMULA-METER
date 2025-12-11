@@ -7,7 +7,7 @@ from src.gui.gui import MainDisplayWindow, WindowListener
 from src.gui.splash_screen import SplashScreen
 from src.util import config
 
-
+# サービス類はここでインポート
 from src.services.vehicle_service import VehicleService
 from src.services.telemetry_service import TelemetryService
 from src.services.hardware_service import HardwareService
@@ -27,19 +27,15 @@ class Application(QObject, WindowListener):
     def __init__(self):
         super().__init__()
 
-        # サービス層の初期化 (これでロジックやデバイス管理を委譲)
-        self.vehicle_service = VehicleService()
-        self.telemetry_service = TelemetryService()
-        self.hardware_service = HardwareService()
+        # 変数枠だけ確保
+        self.vehicle_service = None
+        self.telemetry_service = None
+        self.hardware_service = None
 
         self.latest_tpms_data = {}
         self.current_gps_data = {}
         self.current_lsd_level = 1
         self.update_count = 0
-
-        # Connect signals from HardwareService
-        self.hardware_service.tpms_updated.connect(self.on_tpms_update)
-        self.hardware_service.gps_updated.connect(self.on_gps_update)
 
         if config.debug:
             print("★ App: DEBUG Mode (GPS Mock Enabled)")
@@ -57,22 +53,34 @@ class Application(QObject, WindowListener):
         image_path = "src/gui/icons/kitformula2.png"
 
         self.splash = SplashScreen(image_path, screen_size)
-
         self.splash.ready_for_heavy_init.connect(self.perform_initialization)
         self.splash.fade_out_finished.connect(self.show_main_window)
+        
         self.splash.start()
         self.app.aboutToQuit.connect(self.cleanup)
         sys.exit(self.app.exec_())
 
     def cleanup(self):
         logger.info("Application shutting down...")
-        # 各サービスに終了処理を委譲
-        self.vehicle_service.save_fuel_state()
-        self.telemetry_service.save_mileage()
-        self.telemetry_service.stop()
-        self.hardware_service.stop()
+        if self.vehicle_service:
+            self.vehicle_service.save_fuel_state()
+        if self.telemetry_service:
+            self.telemetry_service.save_mileage()
+            self.telemetry_service.stop()
+        if self.hardware_service:
+            self.hardware_service.stop()
 
     def perform_initialization(self):
+        """スプラッシュ表示後に実行される重い初期化処理"""
+        logger.info("Starting heavy initialization...")
+
+        self.vehicle_service = VehicleService()
+        self.telemetry_service = TelemetryService()
+        self.hardware_service = HardwareService()
+
+        self.hardware_service.tpms_updated.connect(self.on_tpms_update)
+        self.hardware_service.gps_updated.connect(self.on_gps_update)
+
         self.vehicle_service.machine.initialise()
 
         self.window = MainDisplayWindow(self)
@@ -82,18 +90,19 @@ class Application(QObject, WindowListener):
         self.fuel_save_timer.start(config.FUEL_SAVE_INTERVAL_MS)
 
         self.hardware_service.start()
+        logger.info("Initialization complete.")
         self.splash.start_fade_out()
 
     def _connect_gui_signals(self):
-        # GUIからのリクエストを適切なサービスメソッドに接続
         self.window.requestSetStartLine.connect(self.set_start_line)
         self.window.requestResetFuel.connect(self.reset_fuel_integrator)
-        self.window.requestLapTimeSetup.connect(self.setup_lap_time)
         self.window.requestLsdChange.connect(self.change_lsd_level)
         self.window.requestSetSector.connect(self.set_sector_point)
+        
+        self.window.requestSetTargetLaps.connect(self.set_target_laps)
+        self.window.requestDriverChange.connect(self.change_driver)
+        self.window.requestResetSession.connect(self.reset_session_data)
 
-        # GoPro操作 (HardwareServiceの中のWorkerにアクセス)
-        # ※より厳密には HardwareService に start_gopro_connection() 等を作るのが理想だが、現状はこれでOK
         self.window.requestGoProConnect.connect(
             self.hardware_service.gopro_worker.start_connection
         )
@@ -122,37 +131,55 @@ class Application(QObject, WindowListener):
 
     @pyqtSlot()
     def save_states_periodically(self):
-        self.vehicle_service.save_fuel_state()
-        self.telemetry_service.save_mileage()
+        if self.vehicle_service:
+            self.vehicle_service.save_fuel_state()
+        if self.telemetry_service:
+            self.telemetry_service.save_mileage()
 
     @pyqtSlot()
     def reset_fuel_integrator(self):
         print("★ Fuel Integrator Reset Requested")
         self.vehicle_service.reset_fuel()
-        print(f"-> Fuel reset to {self.vehicle_service.tank_capacity_ml} ml")
+
+    @pyqtSlot(int)
+    def set_target_laps(self, laps: int):
+        print(f"★ Target Laps Set to: {laps}")
+        self.vehicle_service.set_target_laps(laps)
+
+    @pyqtSlot(str)
+    def change_driver(self, driver_name: str):
+        print(f"★ Driver Changed: {driver_name}")
 
     @pyqtSlot()
-    def setup_lap_time(self):
-        print("★ Lap Time Setup Requested")
+    def reset_session_data(self):
+        print("★ Session Data Reset Requested")
+        self.vehicle_service.lap_timer.reset_state(self.vehicle_service.dash_info)
 
     @pyqtSlot()
     def set_start_line(self):
-        lat = self.current_gps_data.get("latitude", 0.0)
-        lon = self.current_gps_data.get("longitude", 0.0)
-        if config.debug:
-            print(f"MOCK: キャリブレーション ({lat}, {lon})")
-        self.vehicle_service.course_manager.calibrate_position(lat, lon)
+        lat = self.current_gps_data.get("latitude")
+        lon = self.current_gps_data.get("longitude")
+        heading = self.current_gps_data.get("heading", 0.0)
+
+        if lat is None or lon is None:
+            print("Error: GPS coordinates are None. Cannot set start line.")
+            return
+
+        self.vehicle_service.course_manager.set_sector_point(0, lat, lon, heading)
         self.vehicle_service.lap_timer.reset_state(self.vehicle_service.dash_info)
 
     @pyqtSlot(int)
     def set_sector_point(self, sector_index: int):
-        internal_index = sector_index - 1
-        lat = self.current_gps_data.get("latitude", 0.0)
-        lon = self.current_gps_data.get("longitude", 0.0)
+        lat = self.current_gps_data.get("latitude")
+        lon = self.current_gps_data.get("longitude")
         heading = self.current_gps_data.get("heading", 0.0)
-        print(f"Registering Sector {sector_index}: {lat}, {lon}, {heading}")
+
+        if lat is None or lon is None:
+            print(f"Error: GPS coordinates are None. Cannot set Sector {sector_index}.")
+            return
+
         self.vehicle_service.course_manager.set_sector_point(
-            internal_index, lat, lon, heading
+            sector_index, lat, lon, heading
         )
 
     @pyqtSlot(dict)
@@ -162,12 +189,9 @@ class Application(QObject, WindowListener):
     @pyqtSlot(dict)
     def on_gps_update(self, data: dict):
         self.current_gps_data = data
-        # GPS品質情報の更新
-        if hasattr(self.vehicle_service.dash_info, "gpsQuality"):
+        if self.vehicle_service and hasattr(self.vehicle_service.dash_info, "gpsQuality"):
             self.vehicle_service.dash_info.gpsQuality = data.get("quality", 0)
-
-        # VehicleServiceにデータ更新を依頼 (LapTimerなどが動く)
-        self.vehicle_service.update(data)
+            self.vehicle_service.update(data)
 
     def show_main_window(self):
         if self.window:
@@ -179,8 +203,9 @@ class Application(QObject, WindowListener):
 
     def onUpdate(self) -> None:
         self.update_count += 1
+        if not self.telemetry_service or not self.vehicle_service:
+            return
 
-        # テレメトリサービスに「現在の状態」を渡して、送信やログ記録を判断・実行してもらう
         self.telemetry_service.process(
             self.vehicle_service.dash_info,
             self.vehicle_service.fuel_percentage,
@@ -188,10 +213,8 @@ class Application(QObject, WindowListener):
             self.current_gps_data,
         )
 
-        # GUIの更新
         if self.window is not None:
             daily_km, total_km = self.telemetry_service.mileage_tracker.get_mileage()
-
             self.window.updateDashboard(
                 self.vehicle_service.dash_info,
                 self.vehicle_service.fuel_percentage,
@@ -200,9 +223,6 @@ class Application(QObject, WindowListener):
                 daily_km,
                 total_km,
             )
-
-    # ★修正2: 不要になった save_fuel_state(self) メソッドを削除しました
-    # 既に save_states_periodically が vehicle_service 経由で呼んでいるため不要です。
 
     @pyqtSlot(int)
     def change_lsd_level(self, level: int):

@@ -118,23 +118,33 @@ class GpsWorker(QObject):
             self._run_serial()
 
     def _run_mock(self):
-        """デバッグ用: 円を描いて走行するデータを生成"""
+        """デバッグ用: 円を描いて走行するデータを生成 (時間補正版)"""
         print("★ GPS Worker: Mock Mode Started")
 
         # 基準点 (適当なサーキットの座標など)
         center_lat = 35.3700
         center_lon = 138.9285
+        
+        # 設定
         radius_meters = 200.0
-        speed_kmh = 60.0
+        speed_kmh = 180.0  # 180km/h
 
         # 角度 (ラジアン)
         angle = 0.0
 
-        # 0.1秒ごとに更新 (10Hz)
-        interval = 0.1
+        # 目標更新頻度
+        target_interval = 0.1
+        
+        # 時間管理用
+        last_time = time.monotonic()
 
         while self._running:
-            # 座標計算 (簡易的)
+            # 現在時刻との差分(dt)を計算して、その分だけ進める
+            now = time.monotonic()
+            dt = now - last_time
+            last_time = now
+
+            # 座標計算
             # 緯度1度≒111km, 経度1度≒91km
             lat_offset = (radius_meters * math.sin(angle)) / 111000.0
             lon_offset = (radius_meters * math.cos(angle)) / 91000.0
@@ -143,7 +153,6 @@ class GpsWorker(QObject):
             current_lon = center_lon + lon_offset
 
             # 方位計算 (接線方向)
-            # 進行方向は反時計回りとする -> 接線角度 = 現在角度 + 90度
             heading_deg = math.degrees(angle) + 90.0
             if heading_deg >= 360:
                 heading_deg -= 360
@@ -153,27 +162,32 @@ class GpsWorker(QObject):
             self.last_known_data["longitude"] = current_lon
             self.last_known_data["heading"] = heading_deg
             self.last_known_data["speed_kph"] = speed_kmh
-            self.last_known_data["quality"] = 1  # Fixあり
+            self.last_known_data["quality"] = 1
             self.last_known_data["sats"] = 12
             self.last_known_data["status"] = "A"
 
-            # 距離計算
-            dist = (speed_kmh / 3600.0) * interval  # km
+            # 距離計算 (経過時間 dt に基づいて加算)
+            dist = (speed_kmh / 3600.0) * dt  # km
             self.total_distance_km += dist
             self.last_known_data["total_distance_km"] = self.total_distance_km
 
             # 送信
             self.data_received.emit(self.last_known_data.copy())
 
-            # 角度を進める
+            # 角度を進める (経過時間 dt に基づいて回転)
             # 角速度 w = v / r
             v_ms = speed_kmh / 3.6
             w = v_ms / radius_meters
-            angle += w * interval
+            angle += w * dt
+            
             if angle > 2 * math.pi:
                 angle -= 2 * math.pi
 
-            time.sleep(interval)
+            # 次のループまでの調整待機
+            # 処理が重い場合は dt が大きくなり、スリープは 0 になる
+            elapsed_processing = time.monotonic() - now
+            sleep_time = max(0.0, target_interval - elapsed_processing)
+            time.sleep(sleep_time)
 
         print("GPS Mock Finished")
 
@@ -187,15 +201,11 @@ class GpsWorker(QObject):
                 self.ser = serial.Serial(self.port, self.baudrate, timeout=1.0)
                 print(f"GPS: シリアルポート {self.port} 接続成功。受信開始。")
 
-                # 接続成功したらエラーをクリア通知（必要であれば）
-                # self.error_occurred.emit("GPS Connected")
-
                 raw_line_count = 0
 
                 # 2. 読み込みループ (接続が維持されている間)
                 while self._running and self.ser.is_open:
                     try:
-                        # データ読み込み
                         line = (
                             self.ser.readline().decode("ascii", errors="ignore").strip()
                         )
@@ -203,34 +213,25 @@ class GpsWorker(QObject):
                         if not line:
                             continue
 
-                        # 最初の数行だけログに出して動作確認しやすくする
                         if raw_line_count < 5:
                             print(f"GPS Raw: {line}")
                             raw_line_count += 1
 
-                        # NMEAフォーマット($GNxxx, $GPxxx)の解析
                         if line.startswith(("$GN", "$GP")):
                             if self.parse_nmea_line(line):
                                 self._update_distance_and_emit()
 
                     except serial.SerialException as se:
-                        # 読み込み中の切断エラー等 -> 内部ループを抜けて再接続へ
                         print(f"GPS切断検知 (Read Error): {se}")
                         break
                     except Exception:
-                        # パースエラーなどは無視して読み込み継続
                         pass
 
             except Exception as e:
-                # 接続時のエラー (デバイスが見つからない等)
                 if self._running:
                     print(f"GPS接続エラー: {e} -> 2秒後に再試行します...")
-                    # GUIに頻繁に通知すると重くなるため、printに留めるか、
-                    # "Retrying..." と一度だけ送る制御を入れるのがベターです
-                    # self.error_occurred.emit(f"GPS Error: {e}")
 
             finally:
-                # 切断処理 (リソース解放)
                 if self.ser and self.ser.is_open:
                     try:
                         self.ser.close()
@@ -238,7 +239,6 @@ class GpsWorker(QObject):
                         pass
                 self.ser = None
 
-            # 3. 再接続待機 (停止フラグが立っていない場合のみ)
             if self._running:
                 time.sleep(2.0)
 
@@ -273,7 +273,6 @@ class GpsWorker(QObject):
         self.data_received.emit(self.last_known_data.copy())
 
     def parse_nmea_line(self, line):
-        # (既存のコードと同じ内容)
         try:
             if "$" not in line:
                 return False
@@ -362,7 +361,6 @@ class GpsWorker(QObject):
         return False
 
     def _sync_system_time(self, date_str, time_str):
-        # (既存のコードと同じ内容、ただしデバッグ時は実行しないガードを入れると良い)
         if self.debug_mode:
             return
         try:

@@ -42,6 +42,10 @@ class QCustomLabel(QLabel):
         self._fontScale = scale
 
     def resizeEvent(self, evt):
+        # ★修正: サイズが0以下のときは計算を行わない（エラーログ防止）
+        if self.size().width() <= 0 or self.size().height() <= 0:
+            return
+
         width = self.size().width() / 2
         height = self.size().height()
         baseSize = 0
@@ -49,10 +53,12 @@ class QCustomLabel(QLabel):
             baseSize = height
         else:
             baseSize = width
-
-        self._font.setPixelSize(int(baseSize * self._fontScale))
+        
+        # ピクセルサイズが1以上になるようにガード
+        pixel_size = max(1, int(baseSize * self._fontScale))
+        
+        self._font.setPixelSize(pixel_size)
         self.setFont(self._font)
-
 
 class TitleValueBox(QGroupBox):
     def __init__(self, titleLabel):

@@ -10,7 +10,7 @@ class EncoderWorker(QObject):
     rotated_ccw = pyqtSignal()
     button_pressed = pyqtSignal()  # これを追加
 
-    def __init__(self, pin_a=27, pin_b=17, pin_sw=22, parent=None):
+    def __init__(self, pin_a=20, pin_b=21, pin_sw=18, parent=None):
         super().__init__(parent)
         self.rotor = None
         self.button = None

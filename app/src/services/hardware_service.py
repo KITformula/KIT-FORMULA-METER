@@ -32,7 +32,7 @@ class HardwareService(QObject):
 
         self.gopro_worker = GoProWorker()
 
-        self.encoder_worker = EncoderWorker(pin_a=27, pin_b=17, pin_sw=22)
+        self.encoder_worker = EncoderWorker(pin_a=20, pin_b=21, pin_sw=18)
 
         self.gps_thread = None
 
