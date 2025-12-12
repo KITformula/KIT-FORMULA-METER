@@ -13,6 +13,7 @@ from src.models.models import (
     OilTemp,
     WaterTemp,
 )
+from src.util import config
 
 
 @dataclass
@@ -22,121 +23,88 @@ class CanIdLength:
 
 
 class DashInfoListener(can.Listener):
-    """
-    MoTeC Set 3 データプロトコル（複数フレーム）を組み立て、
-    解析して dashMachineInfo オブジェクトを更新するステートフルなリスナー。
-    """
-
-    CAN_ID = 0xE8  # MoTeC Set 3 protocol CAN ID
+    CAN_ID = 0xE8
     PACKET_SIZE = 176
     HEADER = bytes([0x82, 0x81, 0x80])
 
     def __init__(self, fuel_calculator: FuelCalculator) -> None:
         super().__init__()
-        # 複数のCANフレームを結合するためのバッファ
         self.buffer = bytearray()
-        # 解析済みの最新データを保持するためのオブジェクト
         self.dashMachineInfo = DashMachineInfo()
         self.last_packet_timestamp: float | None = None
         self.fuel_calculator = fuel_calculator
 
     def on_message_received(self, msg: can.Message) -> None:
-        """NotifierからCANメッセージが届くたびに呼び出される。"""
-
-        # 1. 目的のCAN ID (0xE8) かどうかをチェック
         if msg.arbitration_id != self.CAN_ID:
-            return  # 関係ないIDのメッセージは無視
+            return
 
-        # 2. パケットの先頭かどうかをチェック
         if msg.data.startswith(self.HEADER):
-            # 新しいパケットの始まりなので、バッファをリセット
             self.buffer = bytearray(msg.data)
             return
 
-        # 3. パケットの組み立て途中であれば、データをバッファに追加
         if 0 < len(self.buffer) < self.PACKET_SIZE:
             self.buffer.extend(msg.data)
 
-        # 4. パケットが完全に揃ったかチェック
         if len(self.buffer) >= self.PACKET_SIZE:
-            # CRCチェックとデータの解析を行う
             self._process_full_packet()
-            # 処理が終わったら、次のパケットのためにバッファをクリア
             self.buffer.clear()
 
     def _process_full_packet(self) -> None:
-        """
-        組み立てが完了した176バイトの完全なパケットを処理
-        """
-        # 5. CRCチェック
         data_to_check = self.buffer[:172]
         received_crc = int.from_bytes(self.buffer[172:176], "big")
         calculated_crc = zlib.crc32(data_to_check)
 
         if calculated_crc != received_crc:
-            # CRCが一致しないデータは不正とみなし、処理を中断
             return
 
         current_time = time.time()
         delta_t = 0.0
         if self.last_packet_timestamp is not None:
-            # 前回の時刻が記録されていれば、現在の時刻との差を計算
             delta_t = current_time - self.last_packet_timestamp
 
-        # 今回の処理時刻を「前回の時刻」として保存
         self.last_packet_timestamp = current_time
-
-        # 計算したdelta_tをdashMachineInfoオブジェクトに保存
         self.dashMachineInfo.delta_t = delta_t
 
-        # 6. CRCが一致した場合、データを解析し dashMachineInfo を更新
         try:
-            # PDFのバイトマップに従ってデータを抽出・変換
-            # バイトオーダーは "big" (Motorola byte order)
-
-            # RPM (bytes 4:6)
             rpm_val = int.from_bytes(self.buffer[4:6], "big")
             self.dashMachineInfo.setRpm(rpm_val)
 
-            # Throttle Position (bytes 6:8, scale 0.1)
             tp_val = round(int.from_bytes(self.buffer[6:8], "big") * 0.1, 1)
             self.dashMachineInfo.throttlePosition = tp_val
 
-            # Engine Temperature (WaterTemp) (bytes 12:14, scale 0.1)
             wt_val = round(int.from_bytes(self.buffer[12:14], "big") * 0.1, 1)
             self.dashMachineInfo.waterTemp = WaterTemp(int(wt_val))
 
-            # Oil Temperature (bytes 26:28, scale 0.1)
             ot_val = round(int.from_bytes(self.buffer[26:28], "big") * 0.1, 1)
             self.dashMachineInfo.oilTemp = OilTemp(int(ot_val))
 
-            # Oil Pressure (bytes 28:30, scale 0.1)
             op_val = round(int.from_bytes(self.buffer[28:30], "big") * 0.1, 1)
             self.dashMachineInfo.oilPress.oilPress = op_val
 
-            # Gear Voltage (bytes 30:32, scale 0.01)
             gv_val = round(int.from_bytes(self.buffer[30:32], "big") * 0.01, 2)
             self.dashMachineInfo.gearVoltage = GearVoltage(gv_val)
 
-            # Battery Voltage (bytes 48:50, scale 0.01)
             bv_val = round(int.from_bytes(self.buffer[48:50], "big") * 0.01, 2)
             self.dashMachineInfo.batteryVoltage = BatteryVoltage(bv_val)
 
-            # Fuel Pressure (bytes 24:26, scale 0.1)
             fp_val = round(int.from_bytes(self.buffer[24:26], "big") * 0.1, 1)
             self.dashMachineInfo.fuelPress = FuelPress(int(fp_val))
 
-            # Fuel Effective Pulse Width (bytes 112:114, scale 0.5 µs)
-            fepw_val = round(int.from_bytes(self.buffer[112:114], "big") * 0.5, 1)
-            self.dashMachineInfo.fuelEffectivePulseWidth = fepw_val
+            # --- ★変更: Fuel Used (Bytes 92:93) ---
+            # 単位は「Litres (リットル)」。
+            # FuelCalculatorは ml (ミリリットル) で管理するため、
+            # config.FUEL_USED_SCALING (デフォルト 1000.0) を掛けて ml に変換する。
+            raw_fuel_used_liters = int.from_bytes(self.buffer[92:94], "big")
+            
+            # ml に変換
+            fuel_used_ml = raw_fuel_used_liters * config.FUEL_USED_SCALING
+            
+            self.dashMachineInfo.fuelUsed = fuel_used_ml
 
-            # ★★★ 4. バックグラウンドで直接、分析官に計算を依頼する ★★★
-            self.fuel_calculator.update_consumption(
-                rpm=rpm_val, effective_pulse_width_us=fepw_val, delta_t_sec=delta_t
-            )
+            # FuelCalculator に ml 単位の値を渡す
+            self.fuel_calculator.update_from_ecu(fuel_used_ml)
 
         except IndexError:
-            # 万が一、パケットの長さが足りない場合に備えます。
             print("MoTeC Protocol: Packet parsing error due to invalid length!")
 
 
@@ -171,15 +139,11 @@ class UdpPayloadListener(can.Listener):
     receivedMessages: dict[int, can.Message]
 
     def __init__(self) -> None:
-        # CAN IDの小さい方から順に並べる
         self.canIdLength = sorted(
             self.MOTEC_CAN_ID_LENGTHS + self.DATA_LOGGER_CAN_ID_LENGTHS,
             key=lambda il: il.id,
         )
-
-        # 最初は何も入っていない
         self.receivedMessages = {}
-
         super().__init__()
 
     def on_message_received(self, msg: can.Message) -> None:
