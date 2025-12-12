@@ -75,10 +75,10 @@ class DashInfoListener(can.Listener):
             wt_val = round(int.from_bytes(self.buffer[12:14], "big") * 0.1, 1)
             self.dashMachineInfo.waterTemp = WaterTemp(int(wt_val))
 
-            ot_val = round(int.from_bytes(self.buffer[26:28], "big") * 0.1, 1)
+            ot_val = round(int.from_bytes(self.buffer[45:47], "big") * 0.1, 1)
             self.dashMachineInfo.oilTemp = OilTemp(int(ot_val))
 
-            op_val = round(int.from_bytes(self.buffer[28:30], "big") * 0.1, 1)
+            op_val = round(int.from_bytes(self.buffer[43:45], "big") * 0.1, 1)
             self.dashMachineInfo.oilPress.oilPress = op_val
 
             gv_val = round(int.from_bytes(self.buffer[30:32], "big") * 0.01, 2)
@@ -90,24 +90,25 @@ class DashInfoListener(can.Listener):
             fp_val = round(int.from_bytes(self.buffer[24:26], "big") * 0.1, 1)
             self.dashMachineInfo.fuelPress = FuelPress(int(fp_val))
 
-            # --- ★変更: Fuel Used (Bytes 92:93) ---
-            # 単位は「Litres (リットル)」。
-            # FuelCalculatorは ml (ミリリットル) で管理するため、
-            # config.FUEL_USED_SCALING (デフォルト 1000.0) を掛けて ml に変換する。
-            raw_fuel_used_liters = int.from_bytes(self.buffer[92:94], "big")
+            # --- ★変更: Fuel Used Raw (Bytes 92:93) ---
+            # 92,93バイト目のRaw値を取得
+            raw_fuel_used_value = int.from_bytes(self.buffer[92:94], "big")
             
-            # ml に変換
-            fuel_used_ml = raw_fuel_used_liters * config.FUEL_USED_SCALING
+            # 係数(0.1666666667)を掛けて mL に変換
+            # config.FUEL_USED_SCALING は config.py で設定
+            fuel_used_ml = raw_fuel_used_value * config.FUEL_USED_SCALING
             
             self.dashMachineInfo.fuelUsed = fuel_used_ml
 
-            # FuelCalculator に ml 単位の値を渡す
+            # FuelCalculator に mL 単位の「積算使用量」を渡す
+            # FuelCalculator側で前回値との差分を計算し、全体量から減算する処理が行われます
             self.fuel_calculator.update_from_ecu(fuel_used_ml)
 
         except IndexError:
             print("MoTeC Protocol: Packet parsing error due to invalid length!")
 
 
+# (UdpPayloadListener は変更なしのため省略)
 class UdpPayloadListener(can.Listener):
     MOTEC_CAN_ID_LENGTHS = [
         CanIdLength(0x5F0, 8),

@@ -1,4 +1,4 @@
-from PyQt5.QtCore import pyqtSignal
+from PyQt5.QtCore import pyqtSignal, Qt
 from PyQt5.QtGui import QColor
 from PyQt5.QtWidgets import QDialog, QGridLayout, QStackedWidget, QApplication
 
@@ -121,6 +121,17 @@ class MainDisplayWindow(QDialog):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.stack)
         self.setLayout(layout)
+
+    def keyPressEvent(self, event):
+        """
+        キーボード入力を処理するイベントハンドラ。
+        ESCキーが押されたらアプリケーションを終了する。
+        """
+        if event.key() == Qt.Key_Escape:
+            print("ESCキーが押されました。アプリを終了します。")
+            self.close()  # ウィンドウを閉じる
+        else:
+            super().keyPressEvent(event)
 
     def return_to_settings(self):
         self.stack.setCurrentWidget(self.settings)
