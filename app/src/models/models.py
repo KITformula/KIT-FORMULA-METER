@@ -130,7 +130,7 @@ class GearType(IntEnum):
 
 class GearVoltage(float):
     # EACH_VOLTAGES = [3.86, 4.20, 3.52, 2.84, 2.16, 1.50, 0.81]  # Normal
-    EACH_VOLTAGES = [0.8, 1.53, 2.16, 2.84, 3.52]  # IST
+    EACH_VOLTAGES = [0.8, 1.0, 2.0, 3.0, 4.0]
 
     @property
     def gearType(self) -> GearType:

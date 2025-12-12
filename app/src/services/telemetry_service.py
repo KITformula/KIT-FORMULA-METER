@@ -3,6 +3,7 @@ import time
 import logging
 from src.telemetry.google_sheets_sender import GoogleSheetsSender
 from src.telemetry.mqtt_sender import MqttTelemetrySender
+from src.telemetry.plotjuggler_sender import PlotJugglerSender
 from src.logger.csv_logger import CsvLogger
 from src.mileage.mileage_tracker import MileageTracker
 
@@ -14,21 +15,26 @@ class TelemetryService:
             json_keyfile="service_account.json", spreadsheet_name="KIT_FORMULA_Log_2026"
         )
         
-        self.mqtt_sender = MqttTelemetrySender()
-        self.mqtt_sender.start()
+        # ▼▼▼ MQTT (HiveMQ) の停止 ▼▼▼
+        # self.mqtt_sender = MqttTelemetrySender()
+        # self.mqtt_sender.start()
+
+        # PlotJuggler送信機の初期化と開始
+        self.pj_sender = PlotJugglerSender()
+        self.pj_sender.start()
 
         self.logger = CsvLogger(base_dir="logs")
         self.mileage_tracker = MileageTracker()
         self.last_processed_lap = 0
         
-        # ★追加: ログ用スレッド管理
+        # ログ用スレッド管理
         self._logging_thread = None
         self._logging_active = False
         self._data_provider = None  # データ取得用関数
 
     def start_logging_thread(self, data_provider_func):
         """
-        ★追加: 精密な50ms周期でログを取るための専用スレッドを開始
+        精密な50ms周期でログを取るための専用スレッドを開始
         data_provider_func: 最新の (dash_info, fuel, tpms, gps) を返す関数
         """
         if self._logging_active:
@@ -42,7 +48,7 @@ class TelemetryService:
 
     def _logging_loop(self):
         """
-        ★追加: ドリフト補正付きの精密ループ (50ms)
+        ドリフト補正付きの精密ループ (50ms)
         """
         interval = 0.05  # 50ms
         next_tick = time.monotonic() + interval
@@ -97,12 +103,14 @@ class TelemetryService:
         GUIスレッド(QTimer)から呼ばれる処理。
         ここには「リアルタイム性が重要でない」または「イベント駆動」の処理だけ残す。
         """
-        # 1. MQTT送信 (頻度はGUI更新頻度依存でOK)
-        self.mqtt_sender.send(dash_info, fuel_percent, tpms_data)
+        # 1. MQTT送信 (停止中)
+        # ▼▼▼ ここもコメントアウトしました ▼▼▼
+        # self.mqtt_sender.send(dash_info, fuel_percent, tpms_data)
 
-        # 2. CSVログ記録 -> ★削除 (専用スレッドへ移動)
+        # PlotJugglerへの送信 (UDPなので軽量、GUI更新と同じタイミングで送信)
+        self.pj_sender.send(dash_info, fuel_percent, tpms_data)
 
-        # 3. Google Sheets送信 (ラップ更新時)
+        # 2. Google Sheets送信 (ラップ更新時)
         if dash_info.lapCount < self.last_processed_lap:
             logger.info(f"Session Reset Detected: {self.last_processed_lap} -> {dash_info.lapCount}")
             self.last_processed_lap = dash_info.lapCount
@@ -119,7 +127,7 @@ class TelemetryService:
             
             self.last_processed_lap = dash_info.lapCount
 
-        # 4. 走行距離積算
+        # 3. 走行距離積算
         session_km = gps_data.get("total_distance_km", 0.0)
         self.mileage_tracker.update(session_km)
 
@@ -127,7 +135,7 @@ class TelemetryService:
         self.mileage_tracker.save()
 
     def stop(self):
-        # ★追加: スレッド停止処理
+        # スレッド停止処理
         self._logging_active = False
         if self._logging_thread:
             self._logging_thread.join(timeout=1.0)
@@ -135,4 +143,8 @@ class TelemetryService:
         if self.logger.is_active:
             self.logger.stop()
         self.sender.stop()
-        self.mqtt_sender.stop()
+        
+        # ▼▼▼ ここもコメントアウトしました ▼▼▼
+        # self.mqtt_sender.stop()
+        
+        self.pj_sender.stop()

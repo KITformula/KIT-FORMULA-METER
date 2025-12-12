@@ -18,14 +18,12 @@ cloudMessageApiEndpoint = os.environ.get("CLOUD_MESSAGE_API_ENDPOINT", "")
 cloudLaptimeApiEndpoint = os.environ.get("CLOUD_LAPTIME_API_ENDPOINT", "")
 
 # --- 燃料計算設定 ---
-# 燃料計算ロジック変更に伴い、インジェクター容量や気筒数の設定は削除
-INITIAL_FUEL_ML = float(os.environ.get("INITIAL_FUEL_ML", 5000.0))
+INITIAL_FUEL_ML = float(os.environ.get("INITIAL_FUEL_ML", 4500.0))
 FUEL_SAVE_INTERVAL_MS = int(os.environ.get("FUEL_SAVE_INTERVAL_MS", 1000))
 
-# ★変更: ECUからの "Fuel Used" (Liters) を ml に変換する係数
-# 1 Litre = 1000 ml なので、デフォルトは 1000.0
-# もしECUが 0.1L 単位で送ってくるなら 100.0 に変更してください。
-FUEL_USED_SCALING = float(os.environ.get("FUEL_USED_SCALING", 1000.0))
+# ★変更: ECUからの "Fuel Used" (Raw) を ml に変換する係数
+# ユーザー指定の実測値係数
+FUEL_USED_SCALING = float(os.environ.get("FUEL_USED_SCALING", 0.1666666667))
 
 # --- TPMS設定 ---
 RTL433_FREQUENCY = os.environ.get("RTL433_FREQUENCY", "429.5M")
@@ -46,3 +44,11 @@ MQTT_USERNAME = os.environ.get("MQTT_USERNAME", "kitformula")
 MQTT_PASSWORD = os.environ.get("MQTT_PASSWORD", "Kitformula-2026")
 MQTT_TOPIC = os.environ.get("MQTT_TOPIC", "vehicle/telemetry")
 MQTT_KEEP_ALIVE_SEC = int(os.environ.get("MQTT_KEEP_ALIVE_SEC", 10))
+
+# --- PlotJuggler / UDP Telemetry 設定 ---
+# 複数のIPに送る場合はカンマ区切りで指定
+# message.txt にあったIPをデフォルト値として設定
+_ips_str = os.environ.get("PLOTJUGGLER_TARGET_IPS", "100.94.77.77,100.86.101.38")
+PLOTJUGGLER_TARGET_IPS = [ip.strip() for ip in _ips_str.split(",") if ip.strip()]
+
+PLOTJUGGLER_PORT = int(os.environ.get("PLOTJUGGLER_PORT", 9870))
