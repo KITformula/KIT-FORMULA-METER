@@ -203,7 +203,7 @@ class DashMachineInfo:
     gpsQuality: int  # GPS品質
 
     rpm: Rpm
-    speed: float  # ★追加: 速度フィールドを明示的に追加
+    speed: float
     throttlePosition: float
     waterTemp: WaterTemp
     oilTemp: OilTemp
@@ -219,12 +219,15 @@ class DashMachineInfo:
 
     sector_times: dict[int, float]
     sector_diffs: dict[int, float]
-    targetLaps: int = 0       # 0なら無制限(練習モード)、設定値があればその周回数で終了
-    isRaceFinished: bool = False  # レースが終了したかどうか
+    
+    # ★追加: 設定値と状態
+    targetLaps: int
+    isRaceFinished: bool
+    driver: str  # ドライバー名
 
     def __init__(self) -> None:
         self.rpm = Rpm(0)
-        self.speed = 0.0  # ★初期化
+        self.speed = 0.0
         self.throttlePosition = 0.0
         self.waterTemp = WaterTemp(0)
         self.oilTemp = OilTemp(0)
@@ -245,38 +248,31 @@ class DashMachineInfo:
 
         self.sector_times = {}
         self.sector_diffs = {}
-
+        
         self.targetLaps = 0
         self.isRaceFinished = False
+        self.driver = "None"
 
     def setRpm(self, rpm: int):
         self.rpm = Rpm(rpm)
         self.oilPress.rpm = rpm
 
     def to_telemetry_payload(self) -> dict:
-        """
-        ★洗練ポイント: MQTT送信用の軽量JSON辞書を生成するメソッド
-        送信ロジック側でガチャガチャ変換するのではなく、データ自身に変換させる。
-        """
         gear_val = self.gearVoltage.gearType.value
         gear_str = "N" if gear_val == 0 else str(gear_val)
 
         return {
-            # 基本情報
             "rpm": int(self.rpm),
             "spd": round(float(self.speed), 1),
             "gr": gear_str,
-            # エンジン・センサー (小数点1桁に丸めて軽量化)
             "wt": round(float(self.waterTemp), 1),
             "ot": round(float(self.oilTemp), 1),
             "tp": round(float(self.throttlePosition), 1),
-            "op": round(float(self.oilPress.oilPress), 2),  # 油圧はクラス内の属性を参照
+            "op": round(float(self.oilPress.oilPress), 2),
             "v": round(float(self.batteryVoltage), 1),
-            # ラップタイム関連
             "lc": int(self.lapCount),
             "clt": round(float(self.currentLapTime), 2),
             "ltd": round(float(self.lapTimeDiff), 2),
-            # その他（必要なら追加）
             "fp": round(float(self.fuelPress), 1),
         }
 

@@ -7,7 +7,6 @@ from src.gui.gui import MainDisplayWindow, WindowListener
 from src.gui.splash_screen import SplashScreen
 from src.util import config
 
-# サービス類はここでインポート
 from src.services.vehicle_service import VehicleService
 from src.services.telemetry_service import TelemetryService
 from src.services.hardware_service import HardwareService
@@ -27,7 +26,6 @@ class Application(QObject, WindowListener):
     def __init__(self):
         super().__init__()
 
-        # 変数枠だけ確保
         self.vehicle_service = None
         self.telemetry_service = None
         self.hardware_service = None
@@ -71,7 +69,6 @@ class Application(QObject, WindowListener):
             self.hardware_service.stop()
 
     def perform_initialization(self):
-        """スプラッシュ表示後に実行される重い初期化処理"""
         logger.info("Starting heavy initialization...")
 
         self.vehicle_service = VehicleService()
@@ -89,9 +86,29 @@ class Application(QObject, WindowListener):
         self.fuel_save_timer.timeout.connect(self.save_states_periodically)
         self.fuel_save_timer.start(config.FUEL_SAVE_INTERVAL_MS)
 
+        # ★追加: 精密ログ用の専用スレッドを開始する
+        # 現在のデータを取得するメソッドをコールバックとして渡す
+        self.telemetry_service.start_logging_thread(self.get_current_data)
+
         self.hardware_service.start()
         logger.info("Initialization complete.")
         self.splash.start_fade_out()
+
+    # ★追加: ログスレッドから呼ばれるデータ提供メソッド
+    def get_current_data(self):
+        """
+        現在の車両状態、燃料、TPMS、GPSデータをタプルで返す。
+        スレッドセーフにするため、参照を渡す形にする。
+        """
+        if not self.vehicle_service:
+            return None, 0.0, {}, {}
+            
+        return (
+            self.vehicle_service.dash_info,
+            self.vehicle_service.fuel_percentage,
+            self.latest_tpms_data,
+            self.current_gps_data
+        )
 
     def _connect_gui_signals(self):
         self.window.requestSetStartLine.connect(self.set_start_line)
@@ -149,6 +166,8 @@ class Application(QObject, WindowListener):
     @pyqtSlot(str)
     def change_driver(self, driver_name: str):
         print(f"★ Driver Changed: {driver_name}")
+        if self.vehicle_service and self.vehicle_service.dash_info:
+            self.vehicle_service.dash_info.driver = driver_name
 
     @pyqtSlot()
     def reset_session_data(self):
@@ -206,6 +225,7 @@ class Application(QObject, WindowListener):
         if not self.telemetry_service or not self.vehicle_service:
             return
 
+        # CSVログ記録はスレッドに任せるため、ここではMQTT/Sheets/距離積算のみ行う
         self.telemetry_service.process(
             self.vehicle_service.dash_info,
             self.vehicle_service.fuel_percentage,
