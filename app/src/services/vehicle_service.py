@@ -12,9 +12,8 @@ class VehicleService:
         self.tank_capacity_ml = config.INITIAL_FUEL_ML
         current_start_ml = self.fuel_store.load_state() or self.tank_capacity_ml
 
+        # ★変更: インジェクター容量などの引数を削除
         self.fuel_calculator = FuelCalculator(
-            injector_flow_rate_cc_per_min=config.INJECTOR_FLOW_RATE_CC_PER_MIN,
-            num_cylinders=config.NUM_CYLINDERS,
             tank_capacity_ml=self.tank_capacity_ml,
             current_remaining_ml=current_start_ml,
         )
@@ -34,18 +33,9 @@ class VehicleService:
         self.fuel_calculator.remaining_fuel_ml = self.tank_capacity_ml
         self.save_fuel_state()
 
-    # ★追加: ターゲット周回数を設定するメソッド
     def set_target_laps(self, laps: int):
-        """
-        アプリケーション層からのターゲット周回数設定を受け取り、
-        LapTimerおよびDashMachineInfoに反映させる。
-        """
         print(f"VehicleService: Setting target laps to {laps}")
-        # 計測ロジックへ設定値を渡す
         self.lap_timer.set_target_laps(laps)
-        
-        # GUI表示用にデータモデルにも設定値を記録しておく
-        # (DashMachineInfo側にも targetLaps フィールドを追加しておくことを推奨)
         self.dash_info.targetLaps = laps
 
     @property

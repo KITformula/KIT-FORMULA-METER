@@ -12,7 +12,6 @@ class MockMachine:
     """
 
     def __init__(self):
-        # PDFに記載されている各パラメータを初期化
         self.rpm: int = 0
         self.throttlePosition: float = 0.0
         self.manifoldPressure: float = 101.3
@@ -22,65 +21,48 @@ class MockMachine:
         self.gearVoltage: float = 2.5
         self.batteryVoltage: float = 13.8
         self.fuelPressure: float = 30.0
-        self.fuelEffectivePulseWidth: float = 5.0
+        
+        # ★変更: FuelUsed (Litres)
+        # 16bit intなので、0, 1, 2... とリットル単位で増える
+        self.fuelUsedLitres: int = 0
 
     def to_motec_set3_messages(self) -> List[can.Message]:
-        """
-        現在のマシン状態から、176バイトのデータパケットを構築し、
-        22個の8バイトCANフレームに分割して返す。
-        """
-        # 1. 176バイトの空のバイト配列を用意
         packet = bytearray(176)
 
-        # 2. ヘッダーとデータ長を設定 (PDF参照)
+        # Header
         packet[0:3] = [0x82, 0x81, 0x80]
         packet[3] = 84
 
-        # 3. 各パラメータをスケール変換し、ビッグエンディアンの2バイトで書き込む (PDF参照)
         try:
             packet[4:6] = (self.rpm & 0xFFFF).to_bytes(2, "big")
-            packet[6:8] = (round(self.throttlePosition * 10) & 0xFFFF).to_bytes(
-                2, "big"
-            )
-            packet[8:10] = (round(self.manifoldPressure * 10) & 0xFFFF).to_bytes(
-                2, "big"
-            )
-            packet[12:14] = (round(self.engineTemperature * 10) & 0xFFFF).to_bytes(
-                2, "big"
-            )
+            packet[6:8] = (round(self.throttlePosition * 10) & 0xFFFF).to_bytes(2, "big")
+            packet[8:10] = (round(self.manifoldPressure * 10) & 0xFFFF).to_bytes(2, "big")
+            packet[12:14] = (round(self.engineTemperature * 10) & 0xFFFF).to_bytes(2, "big")
             packet[24:26] = (round(self.fuelPressure * 10) & 0xFFFF).to_bytes(2, "big")
-            packet[26:28] = (round(self.oilTemperature * 10) & 0xFFFF).to_bytes(
-                2, "big"
-            )
+            packet[26:28] = (round(self.oilTemperature * 10) & 0xFFFF).to_bytes(2, "big")
             packet[28:30] = (round(self.oilPressure * 10) & 0xFFFF).to_bytes(2, "big")
             packet[30:32] = (round(self.gearVoltage * 100) & 0xFFFF).to_bytes(2, "big")
-            packet[48:50] = (round(self.batteryVoltage * 100) & 0xFFFF).to_bytes(
-                2, "big"
-            )
+            packet[48:50] = (round(self.batteryVoltage * 100) & 0xFFFF).to_bytes(2, "big")
 
-            # 仕様書通り、0.5 µs単位なので、実際の値を0.5で割る (つまり2を掛ける)
-            fepw_val = round(self.fuelEffectivePulseWidth * 2)
-            packet[112:114] = (fepw_val & 0xFFFF).to_bytes(2, "big")
+            # ★変更: Byte 92:93 Fuel Used (Litres)
+            # 16bit int (0-65535 Litres)
+            packet[92:94] = (self.fuelUsedLitres & 0xFFFF).to_bytes(2, "big")
 
         except Exception as e:
             print(f"Error packing data: {e}")
             return []
 
-        # 4. CRC32を計算 (ヘッダーとデータ部、合計172バイトが対象)
         data_to_check = packet[:172]
         calculated_crc = zlib.crc32(data_to_check)
-
-        # 計算したCRCをパケットの末尾4バイトに書き込む
         packet[172:176] = calculated_crc.to_bytes(4, "big")
 
-        # 5. 176バイトのパケットを、22個の8バイトCANフレームに分割
         messages = []
         for i in range(22):
             start = i * 8
             end = start + 8
             data_chunk = packet[start:end]
             msg = can.Message(
-                arbitration_id=0xE8,  # 10進数で232
+                arbitration_id=0xE8,
                 is_extended_id=False,
                 data=data_chunk,
             )
@@ -90,11 +72,6 @@ class MockMachine:
 
 
 class MockCanSender:
-    """
-    MockMachineの状態を定期的に更新し、
-    MoTeC Set 3 プロトコルに従ったCANメッセージを仮想バスに送信するクラス。
-    """
-
     def __init__(self) -> None:
         self.bus = can.Bus(channel="debug", interface="virtual")
         self.machine = MockMachine()
@@ -103,21 +80,22 @@ class MockCanSender:
         self.bus.shutdown()
 
     def updateMachine(self):
-        """時間に応じてマシンのパラメータを擬似的に変動させる。"""
-        # ミリ秒単位の整数時間をベースに計算することで、浮動小数点数の誤差を減らす
         t = int(time.time() * 1000)
         self.machine.rpm = 2500 + (t % 12000)
-        self.machine.throttlePosition = (t % 1001) / 10.0  # 1001にすることで0.0も表現
+        self.machine.throttlePosition = (t % 1001) / 10.0
         self.machine.engineTemperature = 50 + (t % 400) / 10.0
         self.machine.oilTemperature = 90 + (t % 400) / 10.0
         self.machine.oilPressure = 30.0 + (t % 70) / 0.1
         self.machine.gearVoltage = 0.5 + (t % 4501) / 1000.0
-        self.machine.batteryVoltage = 9.0 + (t % 500) / 100.0
+        self.machine.batteryVoltage = 9.0 + (t % 500) / 10.0
         self.machine.fuelPressure = 27.0 + (t % 100) / 10.0
-        self.machine.fuelEffectivePulseWidth = 3000 + (t % 9200)
+        
+        # ★追加: 燃料使用量 (リットル) のシミュレーション
+        # 1リットル消費するのに時間がかかるため、非常にゆっくり増やす
+        # 例: 10秒(10000ms)ごとに1リットル増える (かなり早いがテスト用)
+        self.machine.fuelUsedLitres = int((t / 10000) % 65000)
 
     def sendEvery(self):
-        """無限ループで、一定間隔ごとにCANメッセージを送信する。"""
         while True:
             self.updateMachine()
             messages_to_send = self.machine.to_motec_set3_messages()
@@ -129,7 +107,6 @@ class MockCanSender:
             time.sleep(0.05)
 
     def start(self):
-        """バックグラウンドスレッドで送信ループを開始する。"""
         t = threading.Thread(target=self.sendEvery)
         t.setDaemon(True)
         t.start()

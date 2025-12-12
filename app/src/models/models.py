@@ -197,10 +197,10 @@ class DashMachineInfo:
     """
 
     lapCount: int
-    currentLapTime: float  # リアルタイムの経過時間または確定したラップタイム
+    currentLapTime: float
     lastLapTime: float
-    lapTimeDiff: float  # 前周との差 (Δタイム)
-    gpsQuality: int  # GPS品質
+    lapTimeDiff: float
+    gpsQuality: int
 
     rpm: Rpm
     speed: float
@@ -214,16 +214,18 @@ class DashMachineInfo:
     fuelPress: FuelPress
     brakePress: BrakePress
 
-    fuelEffectivePulseWidth: float
-    delta_t: float  # 前回のパケットからの経過時間
+    # ★変更: fuelEffectivePulseWidth を削除し fuelUsed を追加
+    # 単位は ml (config.FUEL_USED_SCALING 適用後)
+    fuelUsed: float
+
+    delta_t: float
 
     sector_times: dict[int, float]
     sector_diffs: dict[int, float]
     
-    # ★追加: 設定値と状態
     targetLaps: int
     isRaceFinished: bool
-    driver: str  # ドライバー名
+    driver: str
 
     def __init__(self) -> None:
         self.rpm = Rpm(0)
@@ -237,7 +239,8 @@ class DashMachineInfo:
         self.fanEnabled = False
         self.fuelPress = FuelPress(0.0)
         self.brakePress = BrakePress()
-        self.fuelEffectivePulseWidth = 0.0
+        
+        self.fuelUsed = 0.0
         self.delta_t = 0.0
 
         self.lapCount = 0
