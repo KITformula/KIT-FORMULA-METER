@@ -154,7 +154,7 @@ class MainDisplayWindow(QDialog):
         self.dashboard.updateGoProBattery(value)
         self.gopro_screen.update_battery(value)
 
-    def updateDashboard(self, dashMachineInfo, fuel_percentage, tpms_data, gps_data, daily_km=0.0, total_km=0.0):
+    def updateDashboard(self, dashMachineInfo, fuel_percentage, tpms_data, gps_data, mileage_info=None):
         current_widget = self.stack.currentWidget()
 
         if current_widget == self.dashboard:
@@ -165,8 +165,9 @@ class MainDisplayWindow(QDialog):
             self.gps_sector_screen.update_gps_data(gps_data)
         elif current_widget == self.fuel_screen:
             self.fuel_screen.update_fuel(fuel_percentage)
-        elif current_widget == self.mileage_screen:
-            self.mileage_screen.update_distance(daily_km, total_km)
+        elif current_widget == self.mileage_screen and mileage_info is not None:
+            # ★変更: mileage_info (dict) をそのまま渡す
+            self.mileage_screen.update_distance(mileage_info)
 
     # --- 入力ハンドリング ---
     def input_cw(self): self._dispatch_input("CW")

@@ -260,14 +260,15 @@ class Application(QObject, WindowListener):
                 self.is_auto_recording = False
 
         if self.window is not None:
-            daily_km, total_km = self.telemetry_service.mileage_tracker.get_mileage()
+            # ★変更: get_mileage_info() で辞書データを取得
+            mileage_info = self.telemetry_service.mileage_tracker.get_mileage_info()
+            
             self.window.updateDashboard(
                 self.vehicle_service.dash_info,
                 self.vehicle_service.fuel_percentage,
                 self.latest_tpms_data,
                 self.current_gps_data,
-                daily_km,
-                total_km,
+                mileage_info,  # ★辞書を渡す
             )
 
     @pyqtSlot(int)

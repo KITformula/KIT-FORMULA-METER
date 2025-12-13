@@ -129,7 +129,9 @@ class TelemetryService:
 
         # 3. 走行距離積算
         session_km = gps_data.get("total_distance_km", 0.0)
-        self.mileage_tracker.update(session_km)
+        # ★変更: タイヤ情報を取得して渡す
+        current_tire = getattr(dash_info, "tireSet", "Unknown")
+        self.mileage_tracker.update(session_km, current_tire)
 
     def save_mileage(self):
         self.mileage_tracker.save()
