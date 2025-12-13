@@ -10,12 +10,17 @@ class VehicleService:
     def __init__(self):
         self.fuel_store = FuelStore()
         self.tank_capacity_ml = config.INITIAL_FUEL_ML
-        current_start_ml = self.fuel_store.load_state() or self.tank_capacity_ml
-
-        # ★変更: インジェクター容量などの引数を削除
+        
+        # ★変更: load_stateが2つの値を返すようになったので受け取る
+        loaded_remaining, loaded_consumed = self.fuel_store.load_state()
+        
+        # データがない場合は初期値
+        current_start_ml = loaded_remaining if loaded_remaining is not None else self.tank_capacity_ml
+        
         self.fuel_calculator = FuelCalculator(
             tank_capacity_ml=self.tank_capacity_ml,
             current_remaining_ml=current_start_ml,
+            initial_consumed_total=loaded_consumed # ★これcalcに渡す
         )
 
         self.course_manager = CourseManager()
@@ -26,10 +31,13 @@ class VehicleService:
         self.lap_timer.update(gps_data, self.machine.canMaster.dashMachineInfo)
 
     def save_fuel_state(self):
+        # ★変更: 残量と、合計消費量の両方を保存する
         current_ml = self.fuel_calculator.remaining_fuel_ml
-        self.fuel_store.save_state(current_ml)
+        total_consumed = self.fuel_calculator.session_consumed_total
+        self.fuel_store.save_state(current_ml, total_consumed)
 
     def reset_fuel(self):
+        # 残量を満タンにし、消費量を0リセット
         self.fuel_calculator.remaining_fuel_ml = self.tank_capacity_ml
         self.save_fuel_state()
 
