@@ -35,9 +35,8 @@ class Application(QObject, WindowListener):
         self.current_lsd_level = 1
         self.update_count = 0
 
-        # ★追加: GoProの状態管理用フラグ
         self.gopro_connected = False
-        self.is_auto_recording = False  # RPMトリガーで録画中かどうか
+        self.is_auto_recording = False
 
         if config.debug:
             print("★ App: DEBUG Mode (GPS Mock Enabled)")
@@ -90,14 +89,12 @@ class Application(QObject, WindowListener):
         self.fuel_save_timer.timeout.connect(self.save_states_periodically)
         self.fuel_save_timer.start(config.FUEL_SAVE_INTERVAL_MS)
 
-        # 精密ログ用の専用スレッドを開始する
         self.telemetry_service.start_logging_thread(self.get_current_data)
 
         self.hardware_service.start()
         logger.info("Initialization complete.")
         self.splash.start_fade_out()
 
-    # ログスレッドから呼ばれるデータ提供メソッド
     def get_current_data(self):
         if not self.vehicle_service:
             return None, 0.0, {}, {}
@@ -113,6 +110,7 @@ class Application(QObject, WindowListener):
         self.window.requestSetStartLine.connect(self.set_start_line)
         self.window.requestResetFuel.connect(self.reset_fuel_integrator)
         self.window.requestLsdChange.connect(self.change_lsd_level)
+        self.window.requestTireChange.connect(self.change_tire) # ★追加
         self.window.requestSetSector.connect(self.set_sector_point)
         
         self.window.requestSetTargetLaps.connect(self.set_target_laps)
@@ -139,7 +137,6 @@ class Application(QObject, WindowListener):
             self.window.updateGoProBattery, type=Qt.QueuedConnection
         )
         
-        # ★追加: GoProの接続成功/失敗シグナルを受け取る
         self.hardware_service.gopro_worker.connection_success.connect(
             self.on_gopro_connection_status, type=Qt.QueuedConnection
         )
@@ -172,6 +169,13 @@ class Application(QObject, WindowListener):
         print(f"★ Driver Changed: {driver_name}")
         if self.vehicle_service and self.vehicle_service.dash_info:
             self.vehicle_service.dash_info.driver = driver_name
+
+    # ★追加: タイヤ変更処理
+    @pyqtSlot(str)
+    def change_tire(self, tire_name: str):
+        print(f"★ Tire Set Changed: {tire_name}")
+        if self.vehicle_service and self.vehicle_service.dash_info:
+            self.vehicle_service.dash_info.tireSet = tire_name
 
     @pyqtSlot()
     def reset_session_data(self):
@@ -216,12 +220,10 @@ class Application(QObject, WindowListener):
             self.vehicle_service.dash_info.gpsQuality = data.get("quality", 0)
             self.vehicle_service.update(data)
             
-    # ★追加: GoPro接続状態が変わったときのハンドラ
     @pyqtSlot(bool)
     def on_gopro_connection_status(self, connected: bool):
         self.gopro_connected = connected
         print(f"★ GoPro Connection Status: {connected}")
-        # 切断された場合は自動録画フラグもリセット
         if not connected:
             self.is_auto_recording = False
 
@@ -238,7 +240,6 @@ class Application(QObject, WindowListener):
         if not self.telemetry_service or not self.vehicle_service:
             return
 
-        # CSVログ記録はスレッドに任せるため、ここではMQTT/Sheets/距離積算のみ行う
         self.telemetry_service.process(
             self.vehicle_service.dash_info,
             self.vehicle_service.fuel_percentage,
@@ -246,22 +247,17 @@ class Application(QObject, WindowListener):
             self.current_gps_data,
         )
         
-        # --- ★追加: GoPro 自動録画ロジック (RPM連動) ---
+        # GoPro Auto Rec
         if self.gopro_connected:
             current_rpm = self.vehicle_service.dash_info.rpm
-            
-            # RPM 500以上になったら録画開始 (まだ自動録画していない場合)
             if current_rpm >= 500 and not self.is_auto_recording:
                 print(f"★ Engine Started (RPM {current_rpm}): Auto-Starting GoPro Recording")
                 self.hardware_service.gopro_worker.send_command_record_start()
                 self.is_auto_recording = True
-                
-            # RPM 500未満になったら録画停止 (自動録画中だった場合)
             elif current_rpm < 500 and self.is_auto_recording:
                 print(f"★ Engine Stopped (RPM {current_rpm}): Auto-Stopping GoPro Recording")
                 self.hardware_service.gopro_worker.send_command_record_stop()
                 self.is_auto_recording = False
-        # ---------------------------------------------
 
         if self.window is not None:
             daily_km, total_km = self.telemetry_service.mileage_tracker.get_mileage()

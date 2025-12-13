@@ -66,6 +66,7 @@ class DashInfoListener(can.Listener):
         self.dashMachineInfo.delta_t = delta_t
 
         try:
+            # --- 既存データ ---
             rpm_val = int.from_bytes(self.buffer[4:6], "big")
             self.dashMachineInfo.setRpm(rpm_val)
 
@@ -90,25 +91,28 @@ class DashInfoListener(can.Listener):
             fp_val = round(int.from_bytes(self.buffer[24:26], "big") * 0.1, 1)
             self.dashMachineInfo.fuelPress = FuelPress(int(fp_val))
 
-            # --- ★変更: Fuel Used Raw (Bytes 92:93) ---
-            # 92,93バイト目のRaw値を取得
+            # --- ★追加: Manifold Pressure (Bytes 8:9) ---
+            # 0.1 kPa 単位
+            mp_val = round(int.from_bytes(self.buffer[8:10], "big") * 0.1, 1)
+            self.dashMachineInfo.manifoldPressure = mp_val
+
+            # --- ★追加: Lambda 1 (Bytes 14:15) ---
+            # 0.001 La 単位
+            la1_val = round(int.from_bytes(self.buffer[14:16], "big") * 0.001, 3)
+            self.dashMachineInfo.lambda1 = la1_val
+
+            # --- Fuel Used (Bytes 92:93) ---
             raw_fuel_used_value = int.from_bytes(self.buffer[92:94], "big")
-            
-            # 係数(0.1666666667)を掛けて mL に変換
-            # config.FUEL_USED_SCALING は config.py で設定
             fuel_used_ml = raw_fuel_used_value * config.FUEL_USED_SCALING
             
             self.dashMachineInfo.fuelUsed = fuel_used_ml
-
-            # FuelCalculator に mL 単位の「積算使用量」を渡す
-            # FuelCalculator側で前回値との差分を計算し、全体量から減算する処理が行われます
             self.fuel_calculator.update_from_ecu(fuel_used_ml)
+            self.dashMachineInfo.fuelConsumedTotal = self.fuel_calculator.session_consumed_total
 
         except IndexError:
             print("MoTeC Protocol: Packet parsing error due to invalid length!")
 
 
-# (UdpPayloadListener は変更なしのため省略)
 class UdpPayloadListener(can.Listener):
     MOTEC_CAN_ID_LENGTHS = [
         CanIdLength(0x5F0, 8),

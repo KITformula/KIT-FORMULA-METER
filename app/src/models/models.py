@@ -130,7 +130,8 @@ class GearType(IntEnum):
 
 class GearVoltage(float):
     # EACH_VOLTAGES = [3.86, 4.20, 3.52, 2.84, 2.16, 1.50, 0.81]  # Normal
-    EACH_VOLTAGES = [0.8, 1.0, 2.0, 3.0, 4.0]
+    # [N, 1, 2, 3, 4, 5]
+    EACH_VOLTAGES = [0.8, 1.0, 2.0, 3.0, 4.0, 5.0]
 
     @property
     def gearType(self) -> GearType:
@@ -214,9 +215,13 @@ class DashMachineInfo:
     fuelPress: FuelPress
     brakePress: BrakePress
 
-    # ★変更: fuelEffectivePulseWidth を削除し fuelUsed を追加
-    # 単位は ml (config.FUEL_USED_SCALING 適用後)
+    # 燃料関連
     fuelUsed: float
+    fuelConsumedTotal: float
+
+    # 追加センサー
+    manifoldPressure: float
+    lambda1: float
 
     delta_t: float
 
@@ -226,6 +231,9 @@ class DashMachineInfo:
     targetLaps: int
     isRaceFinished: bool
     driver: str
+    
+    # ★追加: タイヤセット情報
+    tireSet: str
 
     def __init__(self) -> None:
         self.rpm = Rpm(0)
@@ -241,6 +249,11 @@ class DashMachineInfo:
         self.brakePress = BrakePress()
         
         self.fuelUsed = 0.0
+        self.fuelConsumedTotal = 0.0
+        
+        self.manifoldPressure = 0.0
+        self.lambda1 = 0.0
+        
         self.delta_t = 0.0
 
         self.lapCount = 0
@@ -255,6 +268,9 @@ class DashMachineInfo:
         self.targetLaps = 0
         self.isRaceFinished = False
         self.driver = "None"
+        
+        # ★初期値: Dry 1
+        self.tireSet = "Dry 1"
 
     def setRpm(self, rpm: int):
         self.rpm = Rpm(rpm)

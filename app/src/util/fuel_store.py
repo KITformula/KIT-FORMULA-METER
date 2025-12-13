@@ -4,53 +4,51 @@ import os
 
 class FuelStore:
     """
-    燃料の「状態（State）」を不揮発性メモリ（今回はJSONファイル）に
-    読み書きすることに特化した専門家。
+    燃料の「状態（State）」を不揮発性メモリ（JSONファイル）に
+    読み書きすることに特化したクラス。
     """
 
-    # appディレクトリ直下に保存する
     STATE_FILE_PATH = "fuel_state.json"
 
     def __init__(self):
         self.storage_path = os.path.abspath(self.STATE_FILE_PATH)
 
-    def load_state(self) -> float | None:
+    def load_state(self) -> tuple[float | None, float]:
         """
-        ファイルから前回の燃料残量 [ml] を読み込む。
-        失敗した場合は None を返す。
+        ファイルから状態を読み込む。
+        戻り値: (前回の燃料残量 [ml], 前回の合計消費量 [ml])
         """
+        default_consumed = 0.0
+        
         try:
             if not os.path.exists(self.storage_path):
-                return None
+                return None, default_consumed
 
             with open(self.storage_path, "r") as f:
                 data = json.load(f)
-                remaining_ml = float(data["remaining_ml"])
+                remaining_ml = float(data.get("remaining_ml", -1))
+                consumed_ml = float(data.get("consumed_ml", 0.0)) # ★追加
 
                 if remaining_ml < 0:
-                    print(
-                        f"警告: 保存された残量が不正です ({remaining_ml} ml)。リセットします。"
-                    )
-                    return None
+                    print(f"警告: 保存された残量が不正です。リセットします。")
+                    return None, default_consumed
 
-                print(f"前回の燃料残量 {remaining_ml:.2f} ml を読み込みました。")
-                return remaining_ml
+                print(f"燃料状態ロード: 残量={remaining_ml:.1f}ml, 消費合計={consumed_ml:.1f}ml")
+                return remaining_ml, consumed_ml
 
         except Exception as e:
             print(f"エラー: 燃料状態ファイルの読み込みに失敗しました。 {e}")
-            try:
-                os.remove(self.storage_path)
-                print(f"破損した {self.storage_path} を削除しました。")
-            except OSError:
-                pass
-            return None
+            return None, default_consumed
 
-    def save_state(self, remaining_ml: float):
+    def save_state(self, remaining_ml: float, consumed_ml: float):
         """
-        現在の燃料残量 [ml] をファイルに上書き保存する。
+        現在の燃料残量と合計消費量を保存する。
         """
         try:
-            data = {"remaining_ml": remaining_ml}
+            data = {
+                "remaining_ml": remaining_ml,
+                "consumed_ml": consumed_ml # ★追加
+            }
             with open(self.storage_path, "w") as f:
                 json.dump(data, f, indent=4)
 

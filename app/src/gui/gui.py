@@ -6,7 +6,7 @@ from PyQt5.QtWidgets import QDialog, QGridLayout, QStackedWidget, QApplication
 from src.gui.screens.dashboard import DashboardWidget, WindowListener
 from src.gui.screens.menu_main import SettingsScreen
 from src.gui.screens.menu_race import RaceMenuScreen, DriverSelectScreen, GpsSetScreen, GpsSectorScreen, TargetLapsScreen
-from src.gui.screens.menu_machine import MachineMenuScreen, LSDMenuScreen, FuelResetScreen
+from src.gui.screens.menu_machine import MachineMenuScreen, LSDMenuScreen, FuelResetScreen, TireSelectScreen # ★追加
 from src.gui.screens.menu_device import DeviceMenuScreen, GoProMenuScreen
 from src.gui.screens.menu_info import InfoMenuScreen, MileageScreen
 
@@ -21,6 +21,7 @@ class MainDisplayWindow(QDialog):
     requestGoProRecStop = pyqtSignal()
     requestSetTargetLaps = pyqtSignal(int)
     requestLsdChange = pyqtSignal(int)
+    requestTireChange = pyqtSignal(str) # ★追加
     requestSetSector = pyqtSignal(int)
     requestDriverChange = pyqtSignal(str)
     requestResetSession = pyqtSignal()
@@ -79,6 +80,7 @@ class MainDisplayWindow(QDialog):
         self.machine_menu = MachineMenuScreen()
         self.machine_menu.requestOpenLSD.connect(lambda: self.stack.setCurrentWidget(self.lsd_screen))
         self.machine_menu.requestOpenFuel.connect(lambda: self.stack.setCurrentWidget(self.fuel_screen))
+        self.machine_menu.requestOpenTire.connect(lambda: self.stack.setCurrentWidget(self.tire_screen)) # ★追加
         self.machine_menu.requestBack.connect(self.return_to_settings)
 
         self.lsd_screen = LSDMenuScreen()
@@ -88,6 +90,11 @@ class MainDisplayWindow(QDialog):
         self.fuel_screen = FuelResetScreen()
         self.fuel_screen.requestReset.connect(self.requestResetFuel.emit)
         self.fuel_screen.requestBack.connect(lambda: self.stack.setCurrentWidget(self.machine_menu))
+
+        # ★追加: タイヤ選択画面
+        self.tire_screen = TireSelectScreen()
+        self.tire_screen.tireSetChanged.connect(self.requestTireChange.emit)
+        self.tire_screen.requestBack.connect(lambda: self.stack.setCurrentWidget(self.machine_menu))
 
         # [DEVICES]
         self.device_menu = DeviceMenuScreen()
@@ -112,7 +119,7 @@ class MainDisplayWindow(QDialog):
         # Stackに追加
         for w in [self.dashboard, self.settings, 
                   self.race_menu, self.driver_screen, self.gps_set_screen, self.gps_sector_screen, self.target_laps_screen,
-                  self.machine_menu, self.lsd_screen, self.fuel_screen,
+                  self.machine_menu, self.lsd_screen, self.fuel_screen, self.tire_screen, # ★追加
                   self.device_menu, self.gopro_screen,
                   self.info_menu, self.mileage_screen]:
             self.stack.addWidget(w)
