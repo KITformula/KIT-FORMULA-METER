@@ -54,6 +54,7 @@ class Application(QObject, WindowListener):
         image_path = "src/gui/icons/kitformula2.png"
 
         self.splash = SplashScreen(image_path, screen_size)
+        self.splash.setCursor(Qt.BlankCursor)
         self.splash.ready_for_heavy_init.connect(self.perform_initialization)
         self.splash.fade_out_finished.connect(self.show_main_window)
         

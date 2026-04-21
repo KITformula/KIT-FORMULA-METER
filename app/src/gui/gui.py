@@ -33,6 +33,7 @@ class MainDisplayWindow(QDialog):
         palette.setColor(self.backgroundRole(), QColor("#000"))
         palette.setColor(self.foregroundRole(), QColor("#FFF"))
         self.setPalette(palette)
+        self.setCursor(Qt.BlankCursor)
 
         self.listener = listener
         self.stack = QStackedWidget()
