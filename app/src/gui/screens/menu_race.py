@@ -79,11 +79,7 @@ class DriverSelectScreen(QWidget):
         self.layout = QVBoxLayout()
         self.layout.addWidget(QLabel("DRIVER SELECT", alignment=Qt.AlignCenter, styleSheet="font-size: 32px; font-weight: bold; color: #00FF00;"))
         
-        # 現在のドライバー表示用ラベル
-        self.current_driver_label = QLabel("Current Driver: Unknown", alignment=Qt.AlignCenter, 
-                                         styleSheet="font-size: 24px; font-weight: bold; color: #AAA; border-top: 1px solid #555; padding-top: 10px;")
-        self.layout.addWidget(self.current_driver_label)
-        
+        # 先にリストを配置する
         self.list = QListWidget()
         self.list.setStyleSheet("""
             QListWidget { font-size: 40px; background-color: #222; color: white; } 
@@ -95,24 +91,27 @@ class DriverSelectScreen(QWidget):
         
         # 画像アイコンの設定
         flag_icon = QIcon("src/gui/icons/japan.png")
-        honda_icon = QIcon("src/gui/icons/Honda.png") # Hondaのロゴを読み込み
-        
+        honda_icon = QIcon("src/gui/icons/Honda.png")
         self.list.setIconSize(QSize(60, 40)) 
 
         for name in self.drivers:
             item = QListWidgetItem(name)
-            
-            # 条件分岐: H.BAMOSならHondaロゴ、それ以外(None除く)は国旗
             if name == "H.BAMOS":
                 item.setIcon(honda_icon)
             elif name != "None":
                 item.setIcon(flag_icon)
-                
             self.list.addItem(item)
         
         self.list.setCurrentRow(0)
         self.layout.addWidget(self.list)
+        
         self.layout.addWidget(QLabel("Push: SELECT & BACK", alignment=Qt.AlignCenter, styleSheet="font-size: 20px; color: #AAA;"))
+
+        # ★修正箇所: 現在のドライバー表示をリストの下部に移動し、色を付けて少し目立たせる
+        self.current_driver_label = QLabel("Current Driver: Unknown", alignment=Qt.AlignCenter, 
+                                         styleSheet="font-size: 28px; font-weight: bold; color: #0FF; border-top: 2px solid #555; padding-top: 10px; margin-top: 5px;")
+        self.layout.addWidget(self.current_driver_label)
+
         self.setLayout(self.layout)
         p = self.palette(); p.setColor(self.backgroundRole(), QColor("#333")); self.setPalette(p); self.setAutoFillBackground(True)
 
@@ -128,12 +127,8 @@ class DriverSelectScreen(QWidget):
             self.list.setCurrentRow(len(self.drivers)-1 if row <= 0 else row - 1)
             return True
         elif input_type == "ENTER":
-            # リストから選択されたドライバー名を取得
             selected_driver = self.drivers[row]
-            
-            # ★修正箇所: 決定時に自身のラベルも更新する
             self.set_current_driver(selected_driver)
-            
             self.driverChanged.emit(selected_driver)
             self.requestBack.emit()
             return True

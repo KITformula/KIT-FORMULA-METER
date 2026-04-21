@@ -49,16 +49,24 @@ class PwmDeviceMenuScreen(QWidget):
         self.layout = QVBoxLayout()
         self.layout.addWidget(QLabel(f"{title} Control", alignment=Qt.AlignCenter, styleSheet="font-size: 32px; font-weight: bold; color: #0FF; margin-bottom: 10px;"))
         
-        self.val_label = QLabel(f"{self.value}%", alignment=Qt.AlignCenter, styleSheet="font-size: 80px; font-weight: bold; color: white;")
+        # ★追加: 中央に寄せるための余白（上）
+        self.layout.addStretch(1)
+        
+        # 数値を大きく中央に表示
+        self.val_label = QLabel(f"{self.value}%", alignment=Qt.AlignCenter, styleSheet="font-size: 120px; font-weight: bold; color: white;")
         self.layout.addWidget(self.val_label)
 
+        # ★追加: 中央に寄せるための余白（下）
+        self.layout.addStretch(1)
+
         self.list = QListWidget()
+        self.list.setFixedHeight(85) # BACKボタンの領域だけ確保
         self.list.setStyleSheet("""
             QListWidget { font-size: 40px; background-color: #222; color: white; border: 2px solid #555; } 
-            QListWidget::item { padding: 20px; }
+            QListWidget::item { padding: 10px; }
             QListWidget::item:selected { background-color: #008B8B; border: 2px solid #0FF; }
         """)
-        self.list.addItems(["1. << BACK"])
+        self.list.addItems(["<< BACK"])
         self.list.setCurrentRow(0)
         self.layout.addWidget(self.list)
         
