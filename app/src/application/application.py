@@ -169,25 +169,19 @@ class Application(QObject, WindowListener):
             self.window.input_enter
         )
 
-
     @pyqtSlot(str)
     def change_driver(self, driver_name: str):
         print(f"★ Driver Changed and Saved: {driver_name}")
-        # 保存処理
         self.settings.set("driver", driver_name)
-        
         if self.vehicle_service and self.vehicle_service.dash_info:
             self.vehicle_service.dash_info.driver = driver_name
 
     @pyqtSlot(str)
     def change_tire(self, tire_name: str):
         print(f"★ Tire Changed and Saved: {tire_name}")
-        # ★追加：保存処理
         self.settings.set("tire_set", tire_name)
-        
         if self.vehicle_service and self.vehicle_service.dash_info:
             self.vehicle_service.dash_info.tire = tire_name
-
 
     @pyqtSlot(int)
     def change_radiator_fan(self, percent: int):
@@ -200,14 +194,6 @@ class Application(QObject, WindowListener):
         print(f"★ Water Pump Changed to: {percent}%")
         self.settings.set("water_pump", percent)
         self.hardware_service.set_water_pump(percent)
-
-    @pyqtSlot(str)
-    def change_driver(self, driver_name: str):
-        print(f"★ Driver Changed: {driver_name}")
-        # ★追加: ドライバー情報をJSONに保存
-        self.settings.set("driver", driver_name)
-        if self.vehicle_service and self.vehicle_service.dash_info:
-            self.vehicle_service.dash_info.driver = driver_name
 
     @pyqtSlot()
     def save_states_periodically(self):
@@ -225,19 +211,6 @@ class Application(QObject, WindowListener):
     def set_target_laps(self, laps: int):
         print(f"★ Target Laps Set to: {laps}")
         self.vehicle_service.set_target_laps(laps)
-
-    @pyqtSlot(str)
-    def change_driver(self, driver_name: str):
-        print(f"★ Driver Changed: {driver_name}")
-        if self.vehicle_service and self.vehicle_service.dash_info:
-            self.vehicle_service.dash_info.driver = driver_name
-
-    # ★追加: タイヤ変更処理
-    @pyqtSlot(str)
-    def change_tire(self, tire_name: str):
-        print(f"★ Tire Set Changed: {tire_name}")
-        if self.vehicle_service and self.vehicle_service.dash_info:
-            self.vehicle_service.dash_info.tireSet = tire_name
 
     @pyqtSlot()
     def reset_session_data(self):

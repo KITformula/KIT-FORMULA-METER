@@ -71,8 +71,8 @@ class MainDisplayWindow(QDialog):
         self.race_menu.requestResetSession.connect(self.requestResetSession.emit)
         self.race_menu.requestBack.connect(self.return_to_settings)
 
+        # ★ ここが消えていた（または読み込まれていなかった）箇所です
         self.driver_screen = DriverSelectScreen()
-        # ★修正: 次の行のインデントを下げました
         if hasattr(self.driver_screen, 'set_current_driver'):
             self.driver_screen.set_current_driver(driver_val)
         self.driver_screen.driverChanged.connect(self.requestDriverChange.emit)
@@ -95,7 +95,6 @@ class MainDisplayWindow(QDialog):
         self.machine_menu.requestOpenLSD.connect(lambda: self.stack.setCurrentWidget(self.lsd_screen))
         self.machine_menu.requestOpenFuel.connect(lambda: self.stack.setCurrentWidget(self.fuel_screen))
         self.machine_menu.requestOpenTire.connect(lambda: self.stack.setCurrentWidget(self.tire_screen)) 
-        # ★修正: FanとPumpをMachine Menuから開くように接続
         self.machine_menu.requestOpenRadiatorFan.connect(lambda: self.stack.setCurrentWidget(self.fan_screen))
         self.machine_menu.requestOpenWaterPump.connect(lambda: self.stack.setCurrentWidget(self.pump_screen))
         self.machine_menu.requestBack.connect(self.return_to_settings)
@@ -109,15 +108,15 @@ class MainDisplayWindow(QDialog):
         self.fuel_screen.requestBack.connect(lambda: self.stack.setCurrentWidget(self.machine_menu))
 
         self.tire_screen = TireSelectScreen()
+        if hasattr(self.tire_screen, 'set_current_tire'):
+            self.tire_screen.set_current_tire(tire_val)
         self.tire_screen.tireSetChanged.connect(self.requestTireChange.emit)
         self.tire_screen.requestBack.connect(lambda: self.stack.setCurrentWidget(self.machine_menu))
 
-        # ★追加: Radiator Fan スクリーン (BACKの戻り先をmachine_menuに修正)
         self.fan_screen = PwmDeviceMenuScreen("Radiator Fan", initial_value=fan_val)
         self.fan_screen.valueChanged.connect(self.requestRadiatorFanChange.emit)
         self.fan_screen.requestBack.connect(lambda: self.stack.setCurrentWidget(self.machine_menu))
 
-        # ★追加: Water Pump スクリーン (BACKの戻り先をmachine_menuに修正)
         self.pump_screen = PwmDeviceMenuScreen("Water Pump", initial_value=pump_val)
         self.pump_screen.valueChanged.connect(self.requestWaterPumpChange.emit)
         self.pump_screen.requestBack.connect(lambda: self.stack.setCurrentWidget(self.machine_menu))
