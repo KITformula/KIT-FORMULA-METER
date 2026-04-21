@@ -7,7 +7,8 @@ class SettingsStore:
         self.settings = {
             "driver": "Unknown",
             "radiator_fan": 0,
-            "water_pump": 0
+            "water_pump": 0,
+            "tire_set": "Dry_Soft"
         }
         self.load()
 

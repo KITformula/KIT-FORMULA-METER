@@ -91,9 +91,14 @@ class Application(QObject, WindowListener):
         self.vehicle_service.machine.initialise()
 
         # ★追加: 起動時に保存された設定を反映
-        saved_driver = self.settings.get("driver", "Unknown")
+        saved_driver = self.settings.get("driver", "None")
         self.vehicle_service.dash_info.driver = saved_driver
         
+        # 保存されたタイヤ情報を反映
+        saved_tire = self.settings.get("tire_set", "Dry_Soft")
+        self.vehicle_service.dash_info.tire = saved_tire # dash
+        self.window = MainDisplayWindow(self, initial_settings=self.settings.settings)
+
         fan_val = self.settings.get("radiator_fan", 0)
         pump_val = self.settings.get("water_pump", 0)
         self.hardware_service.set_radiator_fan(fan_val)
@@ -163,6 +168,25 @@ class Application(QObject, WindowListener):
         self.hardware_service.encoder_worker.button_pressed.connect(
             self.window.input_enter
         )
+
+
+    @pyqtSlot(str)
+    def change_driver(self, driver_name: str):
+        print(f"★ Driver Changed and Saved: {driver_name}")
+        # 保存処理
+        self.settings.set("driver", driver_name)
+        
+        if self.vehicle_service and self.vehicle_service.dash_info:
+            self.vehicle_service.dash_info.driver = driver_name
+
+    @pyqtSlot(str)
+    def change_tire(self, tire_name: str):
+        print(f"★ Tire Changed and Saved: {tire_name}")
+        # ★追加：保存処理
+        self.settings.set("tire_set", tire_name)
+        
+        if self.vehicle_service and self.vehicle_service.dash_info:
+            self.vehicle_service.dash_info.tire = tire_name
 
 
     @pyqtSlot(int)

@@ -5,34 +5,42 @@ from PyQt5.QtWidgets import QLabel, QVBoxLayout, QListWidget, QWidget
 
 class DeviceMenuScreen(QWidget):
     requestOpenGoPro = pyqtSignal()
-    requestOpenRadiatorFan = pyqtSignal() # ★追加
-    requestOpenWaterPump = pyqtSignal()   # ★追加
+    requestOpenRadiatorFan = pyqtSignal() # シグナル追加
+    requestOpenWaterPump = pyqtSignal()   # シグナル追加
     requestBack = pyqtSignal()
 
     def __init__(self):
         super().__init__()
         self.layout = QVBoxLayout()
-        self.layout.addWidget(QLabel("DEVICES", alignment=Qt.AlignCenter, styleSheet="font-size: 32px; font-weight: bold; color: #0FF; margin-bottom: 10px;"))
+        # タイトル色を orange に変更
+        self.layout.addWidget(QLabel("DEVICES", alignment=Qt.AlignCenter, 
+                                     styleSheet="font-size: 32px; font-weight: bold; color: orange; margin-bottom: 10px;"))
         
         self.list = QListWidget()
+        # 選択時の背景色を #8B4500、枠線を orange に変更
         self.list.setStyleSheet("""
             QListWidget { font-size: 40px; background-color: #222; color: white; border: 2px solid #555; } 
             QListWidget::item { padding: 20px; }
-            QListWidget::item:selected { background-color: #008B8B; border: 2px solid #0FF; }
+            QListWidget::item:selected { background-color: #8B4500; border: 2px solid orange; }
         """)
         self.list.addItems(["1. GoPro Control >", "2. Radiator Fan >", "3. Water Pump >", "4. << BACK"])
+        self.list.setCurrentRow(0)
         self.layout.addWidget(self.list)
         self.setLayout(self.layout)
         p = self.palette(); p.setColor(self.backgroundRole(), QColor("#333")); self.setPalette(p); self.setAutoFillBackground(True)
 
     def handle_input(self, i):
         row = self.list.currentRow()
-        if i == "CW": self.list.setCurrentRow(0 if row >= 3 else row + 1); return True
-        elif i == "CCW": self.list.setCurrentRow(3 if row <= 0 else row - 1); return True
+        if i == "CW": 
+            self.list.setCurrentRow(0 if row >= 3 else row + 1)
+            return True
+        elif i == "CCW": 
+            self.list.setCurrentRow(3 if row <= 0 else row - 1)
+            return True
         elif i == "ENTER":
             if row == 0: self.requestOpenGoPro.emit()
-            elif row == 1: self.requestOpenRadiatorFan.emit() # ★追加
-            elif row == 2: self.requestOpenWaterPump.emit()   # ★追加
+            elif row == 1: self.requestOpenRadiatorFan.emit()
+            elif row == 2: self.requestOpenWaterPump.emit()
             elif row == 3: self.requestBack.emit()
             return True
         return False
@@ -47,26 +55,23 @@ class PwmDeviceMenuScreen(QWidget):
         self.value = initial_value
         
         self.layout = QVBoxLayout()
+        # タイトル（他のデバイス画面と完全に統一）
         self.layout.addWidget(QLabel(f"{title} Control", alignment=Qt.AlignCenter, styleSheet="font-size: 32px; font-weight: bold; color: #0FF; margin-bottom: 10px;"))
         
-        # ★追加: 中央に寄せるための余白（上）
+        # 数値を画面中央に配置
         self.layout.addStretch(1)
-        
-        # 数値を大きく中央に表示
         self.val_label = QLabel(f"{self.value}%", alignment=Qt.AlignCenter, styleSheet="font-size: 120px; font-weight: bold; color: white;")
         self.layout.addWidget(self.val_label)
-
-        # ★追加: 中央に寄せるための余白（下）
         self.layout.addStretch(1)
 
+        # リストウィジェット（余計な高さ制限やパディング変更を削除し、他のデバイス画面と100%統一）
         self.list = QListWidget()
-        self.list.setFixedHeight(85) # BACKボタンの領域だけ確保
         self.list.setStyleSheet("""
             QListWidget { font-size: 40px; background-color: #222; color: white; border: 2px solid #555; } 
-            QListWidget::item { padding: 10px; }
+            QListWidget::item { padding: 20px; }
             QListWidget::item:selected { background-color: #008B8B; border: 2px solid #0FF; }
         """)
-        self.list.addItems(["<< BACK"])
+        self.list.addItems(["1. << BACK"])
         self.list.setCurrentRow(0)
         self.layout.addWidget(self.list)
         

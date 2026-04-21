@@ -6,6 +6,8 @@ class MachineMenuScreen(QWidget):
     requestOpenLSD = pyqtSignal()
     requestOpenFuel = pyqtSignal()
     requestOpenTire = pyqtSignal()  # ★追加シグナル
+    requestOpenRadiatorFan = pyqtSignal() # ★追加
+    requestOpenWaterPump = pyqtSignal()   # ★追加
     requestBack = pyqtSignal()
 
     def __init__(self):
@@ -20,8 +22,15 @@ class MachineMenuScreen(QWidget):
             QListWidget::item:selected { background-color: #8B4500; border: 2px solid orange; }
         """)
         # ★メニュー項目を追加
-        self.items = ["1. LSD Adjustment >", "2. Fuel Reset >", "3. Tire Select >", "4. << BACK"]
-        self.list.addItems(self.items)
+        # 項目を追加
+        self.list.addItems([
+            "1. LSD Setup >", 
+            "2. Fuel Reset >", 
+            "3. Tire Select >", 
+            "4. Radiator Fan >", 
+            "5. Water Pump >", 
+            "6. << BACK"
+        ])
         self.list.setCurrentRow(0)
         self.layout.addWidget(self.list)
         self.setLayout(self.layout)
@@ -29,17 +38,17 @@ class MachineMenuScreen(QWidget):
 
     def handle_input(self, i):
         row = self.list.currentRow()
-        count = len(self.items)
-        if i == "CW": self.list.setCurrentRow(0 if row >= count - 1 else row + 1); return True
-        elif i == "CCW": self.list.setCurrentRow(count - 1 if row <= 0 else row - 1); return True
+        if i == "CW": self.list.setCurrentRow(0 if row >= 5 else row + 1); return True
+        elif i == "CCW": self.list.setCurrentRow(5 if row <= 0 else row - 1); return True
         elif i == "ENTER":
             if row == 0: self.requestOpenLSD.emit()
             elif row == 1: self.requestOpenFuel.emit()
-            elif row == 2: self.requestOpenTire.emit()  # ★追加
-            elif row == 3: self.requestBack.emit()
+            elif row == 2: self.requestOpenTire.emit()
+            elif row == 3: self.requestOpenRadiatorFan.emit()
+            elif row == 4: self.requestOpenWaterPump.emit()
+            elif row == 5: self.requestBack.emit()
             return True
         return False
-
 # --- Sub Screens ---
 
 class LSDMenuScreen(QWidget):
