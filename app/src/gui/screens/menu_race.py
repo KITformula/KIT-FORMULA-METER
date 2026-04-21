@@ -79,6 +79,11 @@ class DriverSelectScreen(QWidget):
         self.layout = QVBoxLayout()
         self.layout.addWidget(QLabel("DRIVER SELECT", alignment=Qt.AlignCenter, styleSheet="font-size: 32px; font-weight: bold; color: #00FF00;"))
         
+        # 現在のドライバー表示用ラベル
+        self.current_driver_label = QLabel("Current Driver: Unknown", alignment=Qt.AlignCenter, 
+                                         styleSheet="font-size: 24px; font-weight: bold; color: #AAA; border-top: 1px solid #555; padding-top: 10px;")
+        self.layout.addWidget(self.current_driver_label)
+        
         self.list = QListWidget()
         self.list.setStyleSheet("""
             QListWidget { font-size: 40px; background-color: #222; color: white; } 
@@ -111,13 +116,25 @@ class DriverSelectScreen(QWidget):
         self.setLayout(self.layout)
         p = self.palette(); p.setColor(self.backgroundRole(), QColor("#333")); self.setPalette(p); self.setAutoFillBackground(True)
 
+    def set_current_driver(self, driver: str):
+        self.current_driver_label.setText(f"Current Driver: {driver}")
+
     def handle_input(self, input_type: str) -> bool:
         row = self.list.currentRow()
-        if input_type == "CW": self.list.setCurrentRow(0 if row >= len(self.drivers)-1 else row + 1); return True
-        elif input_type == "CCW": self.list.setCurrentRow(len(self.drivers)-1 if row <= 0 else row - 1); return True
+        if input_type == "CW": 
+            self.list.setCurrentRow(0 if row >= len(self.drivers)-1 else row + 1)
+            return True
+        elif input_type == "CCW": 
+            self.list.setCurrentRow(len(self.drivers)-1 if row <= 0 else row - 1)
+            return True
         elif input_type == "ENTER":
-            # list.currentRow() でインデックスを取得し、self.drivers から名前を取り出す
-            self.driverChanged.emit(self.drivers[self.list.currentRow()])
+            # リストから選択されたドライバー名を取得
+            selected_driver = self.drivers[row]
+            
+            # ★修正箇所: 決定時に自身のラベルも更新する
+            self.set_current_driver(selected_driver)
+            
+            self.driverChanged.emit(selected_driver)
             self.requestBack.emit()
             return True
         return False

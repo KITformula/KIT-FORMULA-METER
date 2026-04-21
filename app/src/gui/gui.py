@@ -6,8 +6,10 @@ from PyQt5.QtWidgets import QDialog, QGridLayout, QStackedWidget, QApplication
 from src.gui.screens.dashboard import DashboardWidget, WindowListener
 from src.gui.screens.menu_main import SettingsScreen
 from src.gui.screens.menu_race import RaceMenuScreen, DriverSelectScreen, GpsSetScreen, GpsSectorScreen, TargetLapsScreen
-from src.gui.screens.menu_machine import MachineMenuScreen, LSDMenuScreen, FuelResetScreen, TireSelectScreen # ★追加
-from src.gui.screens.menu_device import DeviceMenuScreen, GoProMenuScreen
+from src.gui.screens.menu_machine import MachineMenuScreen, LSDMenuScreen, FuelResetScreen, TireSelectScreen
+from src.gui.screens.menu_device import DeviceMenuScreen, GoProMenuScreen, PwmDeviceMenuScreen
+
+# ★この行が一番重要です！この行がないと InfoMenuScreen エラーが出ます
 from src.gui.screens.menu_info import InfoMenuScreen, MileageScreen
 
 
@@ -26,7 +28,10 @@ class MainDisplayWindow(QDialog):
     requestDriverChange = pyqtSignal(str)
     requestResetSession = pyqtSignal()
 
-    def __init__(self, listener: WindowListener):
+    requestRadiatorFanChange = pyqtSignal(int)
+    requestWaterPumpChange = pyqtSignal(int)
+
+    def __init__(self, listener: WindowListener, initial_settings=None): # ★初期設定を受け取るように変更
         super(MainDisplayWindow, self).__init__(None)
         self.resize(800, 480)
         palette = QApplication.palette()
@@ -37,6 +42,11 @@ class MainDisplayWindow(QDialog):
 
         self.listener = listener
         self.stack = QStackedWidget()
+
+        # 設定のデフォルト値
+        fan_val = initial_settings.get("radiator_fan", 0) if initial_settings else 0
+        pump_val = initial_settings.get("water_pump", 0) if initial_settings else 0
+        driver_val = initial_settings.get("driver", "Unknown") if initial_settings else "Unknown"
 
         # 1. Dashboard (Main View)
         self.dashboard = DashboardWidget(listener)
@@ -51,7 +61,6 @@ class MainDisplayWindow(QDialog):
         self.settings.requestExit.connect(self.return_to_dashboard)
 
         # 3. Category Menus & Sub Screens
-        
         # [RACE SETUP]
         self.race_menu = RaceMenuScreen()
         self.race_menu.requestOpenDriver.connect(lambda: self.stack.setCurrentWidget(self.driver_screen))
@@ -62,9 +71,13 @@ class MainDisplayWindow(QDialog):
         self.race_menu.requestBack.connect(self.return_to_settings)
 
         self.driver_screen = DriverSelectScreen()
+        # ★追加: 初期ドライバー名を設定
+        if hasattr(self.driver_screen, 'set_current_driver'):
+            self.driver_screen.set_current_driver(driver_val)
         self.driver_screen.driverChanged.connect(self.requestDriverChange.emit)
         self.driver_screen.requestBack.connect(lambda: self.stack.setCurrentWidget(self.race_menu))
 
+        # ... (既存のGpsSetScreen, GpsSectorScreen, TargetLapsScreen, Machine系の定義はそのまま) ...
         self.gps_set_screen = GpsSetScreen()
         self.gps_set_screen.requestSetLine.connect(self.requestSetStartLine.emit)
         self.gps_set_screen.requestBack.connect(lambda: self.stack.setCurrentWidget(self.race_menu))
@@ -77,11 +90,10 @@ class MainDisplayWindow(QDialog):
         self.target_laps_screen.requestSetLaps.connect(self.requestSetTargetLaps.emit)
         self.target_laps_screen.requestBack.connect(lambda: self.stack.setCurrentWidget(self.race_menu))
 
-        # [MACHINE SETUP]
         self.machine_menu = MachineMenuScreen()
         self.machine_menu.requestOpenLSD.connect(lambda: self.stack.setCurrentWidget(self.lsd_screen))
         self.machine_menu.requestOpenFuel.connect(lambda: self.stack.setCurrentWidget(self.fuel_screen))
-        self.machine_menu.requestOpenTire.connect(lambda: self.stack.setCurrentWidget(self.tire_screen)) # ★追加
+        self.machine_menu.requestOpenTire.connect(lambda: self.stack.setCurrentWidget(self.tire_screen)) 
         self.machine_menu.requestBack.connect(self.return_to_settings)
 
         self.lsd_screen = LSDMenuScreen()
@@ -92,7 +104,6 @@ class MainDisplayWindow(QDialog):
         self.fuel_screen.requestReset.connect(self.requestResetFuel.emit)
         self.fuel_screen.requestBack.connect(lambda: self.stack.setCurrentWidget(self.machine_menu))
 
-        # ★追加: タイヤ選択画面
         self.tire_screen = TireSelectScreen()
         self.tire_screen.tireSetChanged.connect(self.requestTireChange.emit)
         self.tire_screen.requestBack.connect(lambda: self.stack.setCurrentWidget(self.machine_menu))
@@ -100,6 +111,8 @@ class MainDisplayWindow(QDialog):
         # [DEVICES]
         self.device_menu = DeviceMenuScreen()
         self.device_menu.requestOpenGoPro.connect(lambda: self.stack.setCurrentWidget(self.gopro_screen))
+        self.device_menu.requestOpenRadiatorFan.connect(lambda: self.stack.setCurrentWidget(self.fan_screen)) # ★追加
+        self.device_menu.requestOpenWaterPump.connect(lambda: self.stack.setCurrentWidget(self.pump_screen)) # ★追加
         self.device_menu.requestBack.connect(self.return_to_settings)
 
         self.gopro_screen = GoProMenuScreen()
@@ -108,6 +121,16 @@ class MainDisplayWindow(QDialog):
         self.gopro_screen.requestRecStart.connect(self.requestGoProRecStart.emit)
         self.gopro_screen.requestRecStop.connect(self.requestGoProRecStop.emit)
         self.gopro_screen.requestBack.connect(lambda: self.stack.setCurrentWidget(self.device_menu))
+
+        # ★追加: Radiator Fan スクリーン
+        self.fan_screen = PwmDeviceMenuScreen("Radiator Fan", initial_value=fan_val)
+        self.fan_screen.valueChanged.connect(self.requestRadiatorFanChange.emit)
+        self.fan_screen.requestBack.connect(lambda: self.stack.setCurrentWidget(self.device_menu))
+
+        # ★追加: Water Pump スクリーン
+        self.pump_screen = PwmDeviceMenuScreen("Water Pump", initial_value=pump_val)
+        self.pump_screen.valueChanged.connect(self.requestWaterPumpChange.emit)
+        self.pump_screen.requestBack.connect(lambda: self.stack.setCurrentWidget(self.device_menu))
 
         # [INFO / LOG]
         self.info_menu = InfoMenuScreen()
@@ -120,8 +143,8 @@ class MainDisplayWindow(QDialog):
         # Stackに追加
         for w in [self.dashboard, self.settings, 
                   self.race_menu, self.driver_screen, self.gps_set_screen, self.gps_sector_screen, self.target_laps_screen,
-                  self.machine_menu, self.lsd_screen, self.fuel_screen, self.tire_screen, # ★追加
-                  self.device_menu, self.gopro_screen,
+                  self.machine_menu, self.lsd_screen, self.fuel_screen, self.tire_screen, 
+                  self.device_menu, self.gopro_screen, self.fan_screen, self.pump_screen, # ★Fan, Pump追加
                   self.info_menu, self.mileage_screen]:
             self.stack.addWidget(w)
 
@@ -129,6 +152,7 @@ class MainDisplayWindow(QDialog):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.stack)
         self.setLayout(layout)
+
 
     def keyPressEvent(self, event):
         """

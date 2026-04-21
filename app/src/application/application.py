@@ -10,6 +10,7 @@ from src.util import config
 from src.services.vehicle_service import VehicleService
 from src.services.telemetry_service import TelemetryService
 from src.services.hardware_service import HardwareService
+from src.util.settings_store import SettingsStore # ★追加
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +26,9 @@ class AppWindowListener(WindowListener):
 class Application(QObject, WindowListener):
     def __init__(self):
         super().__init__()
+
+        # ★追加: 設定データのロード
+        self.settings = SettingsStore()
 
         self.vehicle_service = None
         self.telemetry_service = None
@@ -64,6 +68,8 @@ class Application(QObject, WindowListener):
 
     def cleanup(self):
         logger.info("Application shutting down...")
+        # 終了時に設定を強制保存
+        self.settings.save()
         if self.vehicle_service:
             self.vehicle_service.save_fuel_state()
         if self.telemetry_service:
@@ -84,7 +90,17 @@ class Application(QObject, WindowListener):
 
         self.vehicle_service.machine.initialise()
 
-        self.window = MainDisplayWindow(self)
+        # ★追加: 起動時に保存された設定を反映
+        saved_driver = self.settings.get("driver", "Unknown")
+        self.vehicle_service.dash_info.driver = saved_driver
+        
+        fan_val = self.settings.get("radiator_fan", 0)
+        pump_val = self.settings.get("water_pump", 0)
+        self.hardware_service.set_radiator_fan(fan_val)
+        self.hardware_service.set_water_pump(pump_val)
+
+        # ★追加: 初期設定をGUIに渡す
+        self.window = MainDisplayWindow(self, initial_settings=self.settings.settings)
         self._connect_gui_signals()
 
         self.fuel_save_timer.timeout.connect(self.save_states_periodically)
@@ -111,12 +127,16 @@ class Application(QObject, WindowListener):
         self.window.requestSetStartLine.connect(self.set_start_line)
         self.window.requestResetFuel.connect(self.reset_fuel_integrator)
         self.window.requestLsdChange.connect(self.change_lsd_level)
-        self.window.requestTireChange.connect(self.change_tire) # ★追加
+        self.window.requestTireChange.connect(self.change_tire) 
         self.window.requestSetSector.connect(self.set_sector_point)
         
         self.window.requestSetTargetLaps.connect(self.set_target_laps)
         self.window.requestDriverChange.connect(self.change_driver)
         self.window.requestResetSession.connect(self.reset_session_data)
+
+        # ★追加: PWM制御のシグナル接続
+        self.window.requestRadiatorFanChange.connect(self.change_radiator_fan)
+        self.window.requestWaterPumpChange.connect(self.change_water_pump)
 
         self.window.requestGoProConnect.connect(
             self.hardware_service.gopro_worker.start_connection
@@ -124,12 +144,8 @@ class Application(QObject, WindowListener):
         self.window.requestGoProDisconnect.connect(
             self.hardware_service.gopro_worker.stop
         )
-        self.window.requestGoProRecStart.connect(
-            self.hardware_service.gopro_worker.send_command_record_start
-        )
-        self.window.requestGoProRecStop.connect(
-            self.hardware_service.gopro_worker.send_command_record_stop
-        )
+
+
 
         self.hardware_service.gopro_worker.status_changed.connect(
             self.window.updateGoProStatus, type=Qt.QueuedConnection
@@ -147,6 +163,27 @@ class Application(QObject, WindowListener):
         self.hardware_service.encoder_worker.button_pressed.connect(
             self.window.input_enter
         )
+
+
+    @pyqtSlot(int)
+    def change_radiator_fan(self, percent: int):
+        print(f"★ Radiator Fan Changed to: {percent}%")
+        self.settings.set("radiator_fan", percent)
+        self.hardware_service.set_radiator_fan(percent)
+
+    @pyqtSlot(int)
+    def change_water_pump(self, percent: int):
+        print(f"★ Water Pump Changed to: {percent}%")
+        self.settings.set("water_pump", percent)
+        self.hardware_service.set_water_pump(percent)
+
+    @pyqtSlot(str)
+    def change_driver(self, driver_name: str):
+        print(f"★ Driver Changed: {driver_name}")
+        # ★追加: ドライバー情報をJSONに保存
+        self.settings.set("driver", driver_name)
+        if self.vehicle_service and self.vehicle_service.dash_info:
+            self.vehicle_service.dash_info.driver = driver_name
 
     @pyqtSlot()
     def save_states_periodically(self):

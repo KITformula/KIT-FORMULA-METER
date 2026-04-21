@@ -5,6 +5,8 @@ from PyQt5.QtWidgets import QLabel, QVBoxLayout, QListWidget, QWidget
 
 class DeviceMenuScreen(QWidget):
     requestOpenGoPro = pyqtSignal()
+    requestOpenRadiatorFan = pyqtSignal() # ★追加
+    requestOpenWaterPump = pyqtSignal()   # ★追加
     requestBack = pyqtSignal()
 
     def __init__(self):
@@ -18,19 +20,73 @@ class DeviceMenuScreen(QWidget):
             QListWidget::item { padding: 20px; }
             QListWidget::item:selected { background-color: #008B8B; border: 2px solid #0FF; }
         """)
-        self.list.addItems(["1. GoPro Control >", "2. << BACK"])
-        self.list.setCurrentRow(0)
+        self.list.addItems(["1. GoPro Control >", "2. Radiator Fan >", "3. Water Pump >", "4. << BACK"])
         self.layout.addWidget(self.list)
         self.setLayout(self.layout)
         p = self.palette(); p.setColor(self.backgroundRole(), QColor("#333")); self.setPalette(p); self.setAutoFillBackground(True)
 
     def handle_input(self, i):
         row = self.list.currentRow()
-        if i == "CW": self.list.setCurrentRow(0 if row >= 1 else row + 1); return True
-        elif i == "CCW": self.list.setCurrentRow(1 if row <= 0 else row - 1); return True
+        if i == "CW": self.list.setCurrentRow(0 if row >= 3 else row + 1); return True
+        elif i == "CCW": self.list.setCurrentRow(3 if row <= 0 else row - 1); return True
         elif i == "ENTER":
             if row == 0: self.requestOpenGoPro.emit()
-            elif row == 1: self.requestBack.emit()
+            elif row == 1: self.requestOpenRadiatorFan.emit() # ★追加
+            elif row == 2: self.requestOpenWaterPump.emit()   # ★追加
+            elif row == 3: self.requestBack.emit()
+            return True
+        return False
+
+class PwmDeviceMenuScreen(QWidget):
+    requestBack = pyqtSignal()
+    valueChanged = pyqtSignal(int)
+
+    def __init__(self, title: str, initial_value: int = 0):
+        super().__init__()
+        self.title = title
+        self.value = initial_value
+        
+        self.layout = QVBoxLayout()
+        self.layout.addWidget(QLabel(f"{title} Control", alignment=Qt.AlignCenter, styleSheet="font-size: 32px; font-weight: bold; color: #0FF; margin-bottom: 10px;"))
+        
+        self.val_label = QLabel(f"{self.value}%", alignment=Qt.AlignCenter, styleSheet="font-size: 80px; font-weight: bold; color: white;")
+        self.layout.addWidget(self.val_label)
+
+        self.list = QListWidget()
+        self.list.setStyleSheet("""
+            QListWidget { font-size: 40px; background-color: #222; color: white; border: 2px solid #555; } 
+            QListWidget::item { padding: 20px; }
+            QListWidget::item:selected { background-color: #008B8B; border: 2px solid #0FF; }
+        """)
+        self.list.addItems(["1. << BACK"])
+        self.list.setCurrentRow(0)
+        self.layout.addWidget(self.list)
+        
+        self.setLayout(self.layout)
+        p = self.palette(); p.setColor(self.backgroundRole(), QColor("#333")); self.setPalette(p); self.setAutoFillBackground(True)
+
+    def update_value_label(self):
+        self.val_label.setText(f"{self.value}%")
+
+    def set_value(self, val: int):
+        self.value = val
+        self.update_value_label()
+
+    def handle_input(self, i):
+        if i == "CW": 
+            if self.value < 100:
+                self.value += 10
+                self.update_value_label()
+                self.valueChanged.emit(self.value)
+            return True
+        elif i == "CCW": 
+            if self.value > 0:
+                self.value -= 10
+                self.update_value_label()
+                self.valueChanged.emit(self.value)
+            return True
+        elif i == "ENTER":
+            self.requestBack.emit()
             return True
         return False
 
