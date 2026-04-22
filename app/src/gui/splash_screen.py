@@ -26,7 +26,7 @@ class SplashScreen(QWidget):
             screen_size: QApplicationから取得したプライマリ画面のサイズ
         """
         super().__init__()
-
+        
         # メンバー変数の初期化
         self.logo_label = None
         self.opacity_effect = None
@@ -52,6 +52,7 @@ class SplashScreen(QWidget):
         self.setWindowFlags(
             Qt.SplashScreen | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
         )
+        self.setCursor(Qt.BlankCursor)
 
         # 2. ロゴ表示用のQLabelを作成
         self.logo_label = QLabel(self)
