@@ -95,7 +95,7 @@ class DashboardWidget(QWidget):
     def createCenterGroupBox(self):
         self.centerGroupBox = QGroupBox(); self.centerGroupBox.setAttribute(QtCore.Qt.WA_StyledBackground, True); self.centerGroupBox.setObjectName("CenterBox")
         layout = QGridLayout()
-        layout.addWidget(self.gearLabel, 0, 0, 1, 3, QtCore.Qt.AlignTop); layout.addWidget(self.rpmLabel, 1, 0, 1, 3)
+        layout.addWidget(self.gearLabel, 0, 0, 1, 3); layout.addWidget(self.rpmLabel, 1, 0, 1, 3)
         layout.addWidget(self.tpsTitleValueBox, 2, 0, 1, 3); layout.addWidget(self.opsBar, 3, 0, 1, 3)
         layout.setRowStretch(0, 15); layout.setRowStretch(1, 3); layout.setRowStretch(2, 2); layout.setRowStretch(3, 2); layout.setContentsMargins(2, 2, 2, 2); layout.setSpacing(2)
         self.centerGroupBox.setLayout(layout)

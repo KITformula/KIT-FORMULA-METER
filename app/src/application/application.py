@@ -115,7 +115,10 @@ class Application(QObject, WindowListener):
 
         self.hardware_service.start()
         logger.info("Initialization complete.")
+
         self.splash.start_fade_out()
+
+     
 
     def get_current_data(self):
         if not self.vehicle_service:
@@ -266,6 +269,7 @@ class Application(QObject, WindowListener):
         if self.window:
             self.window.showFullScreen()
             self.app.processEvents()
+        
         if self.splash:
             self.splash.close()
             self.splash = None
