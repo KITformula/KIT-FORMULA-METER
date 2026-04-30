@@ -43,8 +43,8 @@ class MqttTelemetrySender(TelemetrySender):
             logger.warning("MQTT Disconnected unexpectedly. Attempting to reconnect...")
 
     def _setup_client(self):
-        self.client.tls_set()
-        self.client.username_pw_set(config.MQTT_USERNAME, config.MQTT_PASSWORD)
+        # self.client.tls_set()
+        # self.client.username_pw_set(config.MQTT_USERNAME, config.MQTT_PASSWORD)
         self.client.on_connect = self._on_connect
         self.client.on_disconnect = self._on_disconnect
         self.client.reconnect_delay_set(min_delay=1, max_delay=30)
@@ -74,8 +74,18 @@ class MqttTelemetrySender(TelemetrySender):
             logger.info("MQTT connection stopped.")
 
     def send(self, info: DashMachineInfo, fuel_percent: float, tpms_data: dict) -> None:
+        
         if not self.is_connected:
             return
+
+    def send(self, info: DashMachineInfo, fuel_percent: float, tpms_data: dict) -> None:
+        if not self.is_connected:
+            return
+            
+        # ★追加: デバッグモードならコンソールに出力するだけで送信をスキップ
+        # if config.debug:
+        #     logger.debug("Debug Mode: Skipped MQTT Send.")
+        #     return
 
         def safe_val(val):
             try:
@@ -130,7 +140,8 @@ class MqttTelemetrySender(TelemetrySender):
 
         try:
             payload = json.dumps(payload_data, separators=(",", ":"))
-            full_topic = f"{config.MQTT_TOPIC}/{config.machineId}"
+            # 以下の行を変更: 機体IDを付与せず、configの設定("sensor/motec")をそのまま使う
+            full_topic = config.MQTT_TOPIC 
             self.client.publish(full_topic, payload, qos=0)
 
         except Exception as e:

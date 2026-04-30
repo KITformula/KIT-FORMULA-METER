@@ -36,13 +36,14 @@ GPS_LAP_RADIUS_METERS = float(os.environ.get("GPS_LAP_RADIUS_METERS", 3.0))
 GPS_LAP_COOLDOWN_SEC = float(os.environ.get("GPS_LAP_COOLDOWN_SEC", 10.0))
 
 # --- MQTT 設定 ---
+# --- MQTT 設定 ---
 MQTT_BROKER_URL = os.environ.get(
-    "MQTT_BROKER_URL", "8560a3bce8ff43bb92829fea55036ac1.s1.eu.hivemq.cloud"
+    "MQTT_BROKER_URL", "100.114.150.1"  # ← ここをHiveMQからローカルIPに変更
 )
-MQTT_BROKER_PORT = int(os.environ.get("MQTT_BROKER_PORT", 8883))
-MQTT_USERNAME = os.environ.get("MQTT_USERNAME", "kitformula")
-MQTT_PASSWORD = os.environ.get("MQTT_PASSWORD", "Kitformula-2026")
-MQTT_TOPIC = os.environ.get("MQTT_TOPIC", "vehicle/telemetry")
+MQTT_BROKER_PORT = int(os.environ.get("MQTT_BROKER_PORT", 1883)) # ← 8883から1883へ変更
+MQTT_USERNAME = os.environ.get("MQTT_USERNAME", "") # ← 認証を使わない場合は空にしておくのが安全です
+MQTT_PASSWORD = os.environ.get("MQTT_PASSWORD", "") # ← 同上
+MQTT_TOPIC = os.environ.get("MQTT_TOPIC", "sensor/motec") # ← トピック名を指定のものに変更
 MQTT_KEEP_ALIVE_SEC = int(os.environ.get("MQTT_KEEP_ALIVE_SEC", 10))
 
 # --- PlotJuggler / UDP Telemetry 設定 ---

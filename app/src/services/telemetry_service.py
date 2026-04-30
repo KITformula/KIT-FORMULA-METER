@@ -16,12 +16,12 @@ class TelemetryService:
         )
         
         # ▼▼▼ MQTT (HiveMQ) の停止 ▼▼▼
-        # self.mqtt_sender = MqttTelemetrySender()
-        # self.mqtt_sender.start()
+        self.mqtt_sender = MqttTelemetrySender()
+        self.mqtt_sender.start()
 
         # PlotJuggler送信機の初期化と開始
-        self.pj_sender = PlotJugglerSender()
-        self.pj_sender.start()
+        # self.pj_sender = PlotJugglerSender()
+        # self.pj_sender.start()
 
         self.logger = CsvLogger(base_dir="logs")
         self.mileage_tracker = MileageTracker()
@@ -105,10 +105,10 @@ class TelemetryService:
         """
         # 1. MQTT送信 (停止中)
         # ▼▼▼ ここもコメントアウトしました ▼▼▼
-        # self.mqtt_sender.send(dash_info, fuel_percent, tpms_data)
+        self.mqtt_sender.send(dash_info, fuel_percent, tpms_data)
 
         # PlotJugglerへの送信 (UDPなので軽量、GUI更新と同じタイミングで送信)
-        self.pj_sender.send(dash_info, fuel_percent, tpms_data)
+        # self.pj_sender.send(dash_info, fuel_percent, tpms_data)
 
         # 2. Google Sheets送信 (ラップ更新時)
         if dash_info.lapCount < self.last_processed_lap:
@@ -145,6 +145,6 @@ class TelemetryService:
         self.sender.stop()
         
         # ▼▼▼ ここもコメントアウトしました ▼▼▼
-        # self.mqtt_sender.stop()
+        self.mqtt_sender.stop()
         
-        self.pj_sender.stop()
+        #self.pj_sender.stop()
