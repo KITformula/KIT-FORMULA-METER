@@ -131,7 +131,10 @@ class GearType(IntEnum):
 class GearVoltage(float):
     # EACH_VOLTAGES = [3.86, 4.20, 3.52, 2.84, 2.16, 1.50, 0.81]  # Normal
     # [N, 1, 2, 3, 4, 5]
-    EACH_VOLTAGES = [0.8, 1.0, 2.0, 3.0, 4.0, 5.0]
+    #EACH_VOLTAGES = [2.94, 2.29, 1.96, 1.64, 1.32, 1.09, 0.84]
+    EACH_VOLTAGES = [3.58, 2.04, 1.54, 1.19, 0.94, 0.65, 0.37]
+                  #    N    1速   2速   3速   4速   5速   6速
+    
 
     @property
     def gearType(self) -> GearType:
@@ -151,7 +154,8 @@ class GearVoltage(float):
 
 
 def getGearType(voltage: float) -> GearType:
-    EACH_VOLTAGES = [3.86, 4.20, 3.52, 2.84, 2.16, 1.50, 0.81]
+    EACH_VOLTAGES = [2.94, 2.29, 1.96, 1.64, 1.32, 1.09, 0.84]
+    #EACH_VOLTAGES = [0.50, 0.80, 1.10, 1.30, 1.70, 2.40, 3.70]
 
     deviations = [abs(voltage - eachVoltage) for eachVoltage in EACH_VOLTAGES]
     gearNum = deviations.index(min(deviations))

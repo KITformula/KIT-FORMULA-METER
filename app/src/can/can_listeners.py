@@ -33,6 +33,8 @@ class DashInfoListener(can.Listener):
         self.dashMachineInfo = DashMachineInfo()
         self.last_packet_timestamp: float | None = None
         self.fuel_calculator = fuel_calculator
+        self._gear_voltage_history: list[float] = []  # 追加
+        self._gear_voltage_window = 5             
 
     def on_message_received(self, msg: can.Message) -> None:
         if msg.arbitration_id != self.CAN_ID:
@@ -82,8 +84,13 @@ class DashInfoListener(can.Listener):
             op_val = round(int.from_bytes(self.buffer[43:45], "big") * 0.1, 1)
             self.dashMachineInfo.oilPress.oilPress = op_val
 
-            gv_val = round(int.from_bytes(self.buffer[30:32], "big") * 0.01, 2)
+            gv_val = round(int.from_bytes(self.buffer[30:32], "big") * 0.001, 3)
+            self._gear_voltage_history.append(gv_val)
+            if len(self._gear_voltage_history) > self._gear_voltage_window:
+                self._gear_voltage_history.pop(0)
+            gv_val = sum(self._gear_voltage_history) / len(self._gear_voltage_history)
             self.dashMachineInfo.gearVoltage = GearVoltage(gv_val)
+            
 
             bv_val = round(int.from_bytes(self.buffer[48:50], "big") * 0.01, 2)
             self.dashMachineInfo.batteryVoltage = BatteryVoltage(bv_val)

@@ -9,6 +9,7 @@ class EncoderWorker(QObject):
     rotated_cw = pyqtSignal()
     rotated_ccw = pyqtSignal()
     button_pressed = pyqtSignal()  # これを追加
+    button_released = pyqtSignal()
 
     def __init__(self, pin_a=20, pin_b=21, pin_sw=18, parent=None):
         super().__init__(parent)
@@ -27,6 +28,8 @@ class EncoderWorker(QObject):
                 # 0.05秒(50ms)以内の信号変化を無視します
                 self.button = Button(pin_sw, bounce_time=0.05)
                 self.button.when_pressed = self._on_button_press
+                self.button.when_released = self._on_button_release
+
 
             logger.info(f"Encoder init: A={pin_a}, B={pin_b}, SW={pin_sw}")
         except Exception as e:
@@ -45,6 +48,9 @@ class EncoderWorker(QObject):
     def _on_button_press(self):
         """ボタンが押されたら発火"""
         self.button_pressed.emit()
+
+    def _on_button_release(self):  # ← 追加
+        self.button_released.emit()
 
     def stop(self):
         if self.rotor:

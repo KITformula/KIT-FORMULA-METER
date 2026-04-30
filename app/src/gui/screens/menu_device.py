@@ -21,9 +21,8 @@ class DeviceMenuScreen(QWidget):
         self.list.setStyleSheet("""
             QListWidget { font-size: 40px; background-color: #222; color: white; border: 2px solid #555; } 
             QListWidget::item { padding: 20px; }
-            QListWidget::item:selected { background-color: #8B4500; border: 2px solid orange; }
-        """)
-        self.list.addItems(["1. GoPro Control >", "2. Radiator Fan >", "3. Water Pump >", "4. << BACK"])
+            QListWidget::item:selected { background-color: #8B4500; border: 2px solid orange; }""")
+        self.list.addItems(["1. GoPro Control >", "2. << BACK"])
         self.list.setCurrentRow(0)
         self.layout.addWidget(self.list)
         self.setLayout(self.layout)
@@ -32,16 +31,14 @@ class DeviceMenuScreen(QWidget):
     def handle_input(self, i):
         row = self.list.currentRow()
         if i == "CW": 
-            self.list.setCurrentRow(0 if row >= 3 else row + 1)
+            self.list.setCurrentRow(0 if row >= 1 else row + 1)
             return True
         elif i == "CCW": 
-            self.list.setCurrentRow(3 if row <= 0 else row - 1)
+            self.list.setCurrentRow(1 if row <= 0 else row - 1)
             return True
         elif i == "ENTER":
             if row == 0: self.requestOpenGoPro.emit()
-            elif row == 1: self.requestOpenRadiatorFan.emit()
-            elif row == 2: self.requestOpenWaterPump.emit()
-            elif row == 3: self.requestBack.emit()
+            elif row == 1: self.requestBack.emit()
             return True
         return False
 

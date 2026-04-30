@@ -168,9 +168,9 @@ class Application(QObject, WindowListener):
 
         self.hardware_service.encoder_worker.rotated_cw.connect(self.window.input_cw)
         self.hardware_service.encoder_worker.rotated_ccw.connect(self.window.input_ccw)
-        self.hardware_service.encoder_worker.button_pressed.connect(
-            self.window.input_enter
-        )
+        self.hardware_service.encoder_worker.button_pressed.connect(self.window.input_enter)
+        self.hardware_service.encoder_worker.button_pressed.connect(self.window.input_button_press)
+        self.hardware_service.encoder_worker.button_released.connect(self.window.input_button_release)
 
     @pyqtSlot(str)
     def change_driver(self, driver_name: str):

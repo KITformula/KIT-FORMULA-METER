@@ -42,6 +42,7 @@ class MainDisplayWindow(QDialog):
 
         self.listener = listener
         self.stack = QStackedWidget()
+        self._button_held = False
 
         # 設定のデフォルト値
         fan_val = initial_settings.get("radiator_fan", 0) if initial_settings else 0
@@ -198,12 +199,15 @@ class MainDisplayWindow(QDialog):
     def input_cw(self): self._dispatch_input("CW")
     def input_ccw(self): self._dispatch_input("CCW")
     def input_enter(self): self._dispatch_input("ENTER")
+    def input_button_press(self): self._button_held = True    # ← 追加
+    def input_button_release(self): self._button_held = False  # ← 追加
 
     def _dispatch_input(self, input_type):
         current_widget = self.stack.currentWidget()
         if hasattr(current_widget, "handle_input"):
             if current_widget.handle_input(input_type): return
         
-        # ダッシュボード表示中のみ設定へ
+        # ダッシュボードからの移動はボタンを押しながら回したときのみ
         if input_type in ["CW", "CCW"] and current_widget == self.dashboard:
-            self.stack.setCurrentWidget(self.settings)
+            if self._button_held:  # ← 条件追加
+                self.stack.setCurrentWidget(self.settings)

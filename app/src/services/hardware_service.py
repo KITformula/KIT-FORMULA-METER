@@ -35,8 +35,8 @@ class HardwareService(QObject):
         self.gps_thread = None
 
         # ★追加: PWMコントローラーの初期化 (10kHz)
-        self.radiator_fan = RPiPwmController(pin=13, frequency=10000)
-        self.water_pump = RPiPwmController(pin=12, frequency=10000)
+        self.radiator_fan = RPiPwmController(pin=12, frequency=10000)
+        self.water_pump = RPiPwmController(pin=13, frequency=10000)
 
     def start(self):
         self.tpms_worker.start()
@@ -45,13 +45,13 @@ class HardwareService(QObject):
             self.gps_thread = threading.Thread(target=self.gps_worker.run, daemon=True)
             self.gps_thread.start()
 
-    # ★追加: 各種デバイスの出力設定
+
     def set_radiator_fan(self, percent: int):
-        self.radiator_fan.set_duty_cycle(percent)
+        self.radiator_fan.set_duty_cycle(100 - percent)
 
     def set_water_pump(self, percent: int):
-        self.water_pump.set_duty_cycle(percent)
-
+        self.water_pump.set_duty_cycle(100 - percent)
+    
     def stop(self):
         if self.tpms_worker:
             self.tpms_worker.stop()
